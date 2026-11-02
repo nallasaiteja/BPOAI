@@ -16,3 +16,4 @@ echo "==> Seeding initial application data..."
 python seed_data.py || true
 
 echo "==> Build completed successfully!"
+
