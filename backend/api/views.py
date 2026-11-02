@@ -13,7 +13,7 @@ from core.permissions import IsSuperAdmin, IsManagerOrAbove, CanApproveEmails, C
 from leads.models import Lead, Company, LeadStatus, LeadScoreCategory, LeadSource
 from leads.services import LeadIngestionService
 from leads.tasks import process_lead_pipeline_task, bulk_process_lead_batch_task
-from research.models import ResearchReport, WebsitePage
+from research.models import ResearchReport, WebsitePage, ResearchJob, IntelligenceFinding, ICPConfig
 from requirements_ai.models import BusinessRequirement, ServiceCatalogue, LeadScore
 from requirements_ai.services import ServiceCatalogueService
 from communications.models import (
@@ -30,7 +30,8 @@ from .serializers import (
     ResearchReportSerializer, BusinessRequirementSerializer, ServiceCatalogueSerializer,
     EmailAccountSerializer, EmailDraftSerializer, SentEmailSerializer, EmailReplySerializer,
     FollowUpScheduleSerializer, ProposalSerializer, QuotationSerializer,
-    ProposalConfigSerializer, NotificationSerializer, AIUsageLogSerializer
+    ProposalConfigSerializer, NotificationSerializer, AIUsageLogSerializer,
+    ResearchJobSerializer, IntelligenceFindingSerializer, ICPConfigSerializer
 )
 
 def get_google_oauth_creds():
@@ -621,11 +622,103 @@ class LeadViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def process(self, request, pk=None):
         """
-        Manually trigger the full AI research and scoring pipeline for a lead.
+        Triggers enterprise company website discovery, structured extraction,
+        and explainable ICP-based fit & confidence scoring.
         """
         lead = self.get_object()
-        process_lead_pipeline_task.delay(str(lead.id))
-        return Response({'message': f'AI research pipeline dispatched for {lead.company_name}.'})
+        force_refresh = bool(request.data.get('force_refresh', False))
+
+        from research.services import CompanyResearchService
+        report, job = CompanyResearchService.initialize_and_run(
+            lead_id=str(lead.id),
+            force_refresh=force_refresh,
+            user=request.user if request.user.is_authenticated else None
+        )
+
+        return Response({
+            'message': f'Company intelligence investigation completed for {lead.company_name}.',
+            'job_id': str(job.id),
+            'fit_score': report.company_fit_score if report else 0,
+            'confidence_score': report.research_confidence_score if report else 0,
+            'qualification_status': report.qualification_status if report else 'PENDING',
+            'status': job.status,
+            'is_cached': job.is_cached
+        })
+
+    @action(detail=True, methods=['post'], url_path='investigate')
+    def investigate(self, request, pk=None):
+        """
+        Dedicated endpoint to run or force re-investigate a company's website.
+        """
+        return self.process(request, pk=pk)
+
+    @action(detail=True, methods=['post'], url_path='recalculate-score')
+    def recalculate_score(self, request, pk=None):
+        """
+        Recalculates the 100-point Company Fit Score and Research Confidence
+        against the active ICP configuration.
+        """
+        lead = self.get_object()
+        report = getattr(lead, 'research_report', None)
+        if not report:
+            return Response({'error': 'No research report found for this lead. Run investigation first.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        from research.services import CompanyResearchService
+        updated_report = CompanyResearchService.recalculate_score(report)
+        return Response({
+            'message': f'Scores recalculated for {lead.company_name}.',
+            'fit_score': updated_report.company_fit_score,
+            'confidence_score': updated_report.research_confidence_score,
+            'qualification_status': updated_report.qualification_status,
+            'scoring_breakdown': updated_report.scoring_breakdown
+        })
+
+    @action(detail=True, methods=['post'], url_path='approve-report')
+    def approve_report(self, request, pk=None):
+        """
+        Approves the research findings and advances the lead to the qualified review queue.
+        """
+        lead = self.get_object()
+        report = getattr(lead, 'research_report', None)
+        if not report:
+            return Response({'error': 'No research report found.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        report.human_review_status = 'APPROVED'
+        report.reviewed_by = request.user if request.user.is_authenticated else None
+        report.reviewed_at = timezone.now()
+        report.review_notes = request.data.get('notes', 'Approved by research reviewer.')
+        report.save()
+
+        lead.lead_status = LeadStatus.SCORED
+        lead.save()
+
+        return Response({
+            'message': f'Company report for {lead.company_name} approved for outreach.',
+            'human_review_status': 'APPROVED'
+        })
+
+    @action(detail=True, methods=['post'], url_path='reject-report')
+    def reject_report(self, request, pk=None):
+        """
+        Rejects/disqualifies the lead based on poor ICP fit or conflicting information.
+        """
+        lead = self.get_object()
+        report = getattr(lead, 'research_report', None)
+        if report:
+            report.human_review_status = 'REJECTED'
+            report.reviewed_by = request.user if request.user.is_authenticated else None
+            report.reviewed_at = timezone.now()
+            report.review_notes = request.data.get('notes', 'Disqualified by reviewer.')
+            report.save()
+
+        lead.lead_status = LeadStatus.DISQUALIFIED
+        lead.lead_score_category = LeadScoreCategory.NOT_RELEVANT
+        lead.save()
+
+        return Response({
+            'message': f'Lead {lead.company_name} disqualified.',
+            'lead_status': 'DISQUALIFIED'
+        })
 
     @action(detail=True, methods=['post'])
     def verify(self, request, pk=None):
@@ -640,8 +733,9 @@ class LeadViewSet(viewsets.ModelViewSet):
         lead.save()
 
         # Trigger research pipeline
-        process_lead_pipeline_task.delay(str(lead.id))
-        return Response({'message': f'Lead {lead.company_name} manually verified and queued for research.'})
+        from research.services import CompanyResearchService
+        CompanyResearchService.initialize_and_run(lead_id=str(lead.id), force_refresh=True)
+        return Response({'message': f'Lead {lead.company_name} manually verified and researched.'})
 
 
 class CompanyViewSet(viewsets.ReadOnlyModelViewSet):
@@ -1017,5 +1111,28 @@ class ImportBatchViewSet(viewsets.ReadOnlyModelViewSet):
     from api.serializers import ImportBatchSerializer
     queryset = ImportBatch.objects.all().order_by('-created_at')
     serializer_class = ImportBatchSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+
+class ICPConfigViewSet(viewsets.ModelViewSet):
+    queryset = ICPConfig.objects.all()
+    serializer_class = ICPConfigSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    @action(detail=False, methods=['get'])
+    def active(self, request):
+        config = ICPConfig.get_active_config()
+        return Response(ICPConfigSerializer(config).data)
+
+
+class ResearchReportViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = ResearchReport.objects.all().select_related('lead', 'company').prefetch_related('pages', 'findings')
+    serializer_class = ResearchReportSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+
+class ResearchJobViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = ResearchJob.objects.all().select_related('lead', 'company').order_by('-created_at')
+    serializer_class = ResearchJobSerializer
     permission_classes = [permissions.IsAuthenticated]
 

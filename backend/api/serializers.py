@@ -1,7 +1,10 @@
 from rest_framework import serializers
 from core.models import User, Organization, AuditLog, Notification, AIUsageLog
 from leads.models import Lead, Company, CompanyDomain, ImportBatch, LeadMappingTemplate
-from research.models import ResearchReport, WebsitePage, CompanyProduct, CompanyService
+from research.models import (
+    ResearchReport, WebsitePage, CompanyProduct, CompanyService,
+    ResearchSource, ResearchJob, IntelligenceFinding, ICPConfig
+)
 from requirements_ai.models import BusinessRequirement, ServiceCatalogue, LeadScore
 from communications.models import EmailAccount, EmailDraft, SentEmail, EmailReply, FollowUpSchedule
 from proposals.models import Proposal, Quotation, QuotationLineItem, ProposalConfig
@@ -24,12 +27,35 @@ class CompanySerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 class WebsitePageSerializer(serializers.ModelSerializer):
+    page_type_display = serializers.CharField(source='get_page_type_display', read_only=True)
     class Meta:
         model = WebsitePage
         fields = '__all__'
 
+class IntelligenceFindingSerializer(serializers.ModelSerializer):
+    category_display = serializers.CharField(source='get_category_display', read_only=True)
+    verification_display = serializers.CharField(source='get_verification_status_display', read_only=True)
+    class Meta:
+        model = IntelligenceFinding
+        fields = '__all__'
+
+class ResearchJobSerializer(serializers.ModelSerializer):
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    class Meta:
+        model = ResearchJob
+        fields = '__all__'
+
+class ICPConfigSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ICPConfig
+        fields = '__all__'
+
 class ResearchReportSerializer(serializers.ModelSerializer):
     pages = WebsitePageSerializer(many=True, read_only=True)
+    findings = IntelligenceFindingSerializer(many=True, read_only=True)
+    qualification_display = serializers.CharField(source='get_qualification_status_display', read_only=True)
+    human_review_display = serializers.CharField(source='get_human_review_status_display', read_only=True)
+
     class Meta:
         model = ResearchReport
         fields = '__all__'

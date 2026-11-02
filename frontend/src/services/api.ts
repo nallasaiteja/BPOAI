@@ -2,7 +2,7 @@ import {
   Lead, ServiceCatalogue, BusinessRequirement, 
   EmailDraft, Proposal, DashboardKPIs, ExecutiveInsights,
   FileInspectionResult, MappingPreviewResult, CommitImportResult,
-  LeadMappingTemplate, ImportBatch
+  LeadMappingTemplate, ImportBatch, ICPConfig, ResearchJob
 } from '../types';
 
 const BASE_URL = (import.meta.env.VITE_API_BASE_URL || '/api/v1').replace(/\/+$/, '');
@@ -242,10 +242,54 @@ class ApiService {
     });
   }
 
-  async triggerLeadPipeline(leadId: string): Promise<any> {
+  async triggerLeadPipeline(leadId: string, forceRefresh = false): Promise<any> {
     return this.request(`/leads/${leadId}/process/`, {
       method: 'POST',
+      body: JSON.stringify({ force_refresh: forceRefresh }),
     });
+  }
+
+  async investigateCompany(leadId: string, forceRefresh = false): Promise<any> {
+    return this.request(`/leads/${leadId}/investigate/`, {
+      method: 'POST',
+      body: JSON.stringify({ force_refresh: forceRefresh }),
+    });
+  }
+
+  async recalculateLeadScore(leadId: string): Promise<any> {
+    return this.request(`/leads/${leadId}/recalculate-score/`, {
+      method: 'POST',
+    });
+  }
+
+  async approveResearchReport(leadId: string, notes?: string): Promise<any> {
+    return this.request(`/leads/${leadId}/approve-report/`, {
+      method: 'POST',
+      body: JSON.stringify({ notes }),
+    });
+  }
+
+  async rejectResearchReport(leadId: string, notes?: string): Promise<any> {
+    return this.request(`/leads/${leadId}/reject-report/`, {
+      method: 'POST',
+      body: JSON.stringify({ notes }),
+    });
+  }
+
+  async getActiveICPConfig(): Promise<ICPConfig> {
+    return this.request('/icp-config/active/');
+  }
+
+  async updateICPConfig(id: string, data: Partial<ICPConfig>): Promise<ICPConfig> {
+    return this.request(`/icp-config/${id}/`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getResearchJobs(): Promise<ResearchJob[]> {
+    const res = await this.request<{ results: ResearchJob[] }>('/research-jobs/');
+    return res.results || (res as any);
   }
 
   async verifyLeadManually(leadId: string): Promise<any> {

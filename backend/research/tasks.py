@@ -5,10 +5,10 @@ from leads.models import Lead
 logger = logging.getLogger(__name__)
 
 @shared_task(bind=True, max_retries=2, default_retry_delay=15)
-def execute_company_research_task(self, lead_id: str):
+def execute_company_research_task(self, lead_id: str, force_refresh: bool = False):
     """
-    Background Celery task that executes Module 3 & Module 4 research and website crawl.
-    On success, invokes Module 5 & 6 requirement analysis and lead scoring.
+    Background Celery task that executes enterprise company website discovery,
+    evidence-based intelligence extraction, and ICP-based scoring.
     """
     try:
         lead = Lead.objects.get(id=lead_id)
@@ -17,13 +17,16 @@ def execute_company_research_task(self, lead_id: str):
         return False
 
     from .services import CompanyResearchService
-    report = CompanyResearchService.execute_company_research(lead)
+    report, job = CompanyResearchService.initialize_and_run(lead_id=str(lead.id), force_refresh=force_refresh)
 
     if report:
-        logger.info(f"Research completed successfully for {lead.lead_code}. Queueing requirement analysis.")
-        from requirements_ai.tasks import analyze_lead_requirements_task
-        analyze_lead_requirements_task.delay(str(lead.id))
-        return f"Research completed for {lead.company_name}"
+        logger.info(f"Research completed successfully for {lead.lead_code} ({lead.company_name}).")
+        try:
+            from requirements_ai.tasks import analyze_lead_requirements_task
+            analyze_lead_requirements_task.delay(str(lead.id))
+        except Exception as e:
+            logger.debug(f"Async downstream queue not reachable: {e}")
+        return f"Research completed for {lead.company_name} (Fit: {report.company_fit_score}%, Confidence: {report.research_confidence_score}%)"
     else:
-        logger.warning(f"Research skipped or failed for {lead.lead_code}")
-        return "Research skipped"
+        logger.warning(f"Research finished with error for {lead.lead_code}: {job.error_message}")
+        return f"Research failed: {job.error_message}"

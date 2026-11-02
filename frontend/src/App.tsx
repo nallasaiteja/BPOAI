@@ -447,6 +447,8 @@ export const App: React.FC = () => {
               onTriggerResearch={handleTriggerPipeline}
               onDeleteLead={handleDeleteLead}
               onDeleteAll={handleDeleteAllLeads}
+              onRefresh={loadData}
+              showToast={showToast}
             />
           )}
 

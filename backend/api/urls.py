@@ -5,7 +5,8 @@ from .views import (
     ServiceCatalogueViewSet, BusinessRequirementViewSet, EmailDraftViewSet,
     EmailAccountViewSet, EmailReplyViewSet, FollowUpScheduleViewSet,
     ProposalViewSet, ProposalConfigViewSet, dashboard_analytics_view,
-    LeadMappingTemplateViewSet, ImportBatchViewSet
+    LeadMappingTemplateViewSet, ImportBatchViewSet,
+    ICPConfigViewSet, ResearchReportViewSet, ResearchJobViewSet
 )
 
 router = DefaultRouter()
@@ -23,6 +24,9 @@ router.register(r'proposals', ProposalViewSet, basename='proposals')
 router.register(r'proposal-config', ProposalConfigViewSet, basename='proposal-config')
 router.register(r'mapping-templates', LeadMappingTemplateViewSet, basename='mapping-templates')
 router.register(r'import-batches', ImportBatchViewSet, basename='import-batches')
+router.register(r'icp-config', ICPConfigViewSet, basename='icp-config')
+router.register(r'research-reports', ResearchReportViewSet, basename='research-reports')
+router.register(r'research-jobs', ResearchJobViewSet, basename='research-jobs')
 
 urlpatterns = [
     path('auth/google/callback/', AuthViewSet.as_view({'get': 'google_callback'}), name='auth-google-callback-slash'),

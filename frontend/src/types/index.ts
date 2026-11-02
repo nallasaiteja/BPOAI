@@ -60,26 +60,120 @@ export interface WebsitePage {
   id: string;
   url: string;
   page_type: string;
+  page_type_display?: string;
   page_title: string;
   status_code: number;
+  discovery_method?: string;
+  word_count?: number;
+  is_accessible?: boolean;
+  crawl_error?: string;
   content_snippet?: string;
   technologies_found: string[];
+  scraped_at?: string;
+}
+
+export interface IntelligenceFinding {
+  id: string;
+  finding_key: string;
+  category: string;
+  category_display?: string;
+  claim_value: string;
+  source_url?: string;
+  source_page_title?: string;
+  source_type: string;
+  supporting_quote?: string;
+  verification_status: 'VERIFIED' | 'INFERRED' | 'CONTRADICTORY' | 'UNVERIFIED';
+  verification_display?: string;
+  confidence: number;
+  contradiction_details?: string;
+  retrieved_at: string;
+}
+
+export interface ScoringCriterion {
+  key: string;
+  name: string;
+  score: number;
+  max_score: number;
+  explanation: string;
+  evidence_quotes: string[];
+  missing_info_flags: string[];
+}
+
+export interface ScoringBreakdown {
+  criteria: ScoringCriterion[];
+  total_score: number;
+  max_score: number;
+  summary: string;
+}
+
+export interface ResearchCoverage {
+  target_url?: string;
+  canonical_domain?: string;
+  correspondence_match?: boolean;
+  correspondence_confidence?: number;
+  correspondence_reason?: string;
+  pages_discovered?: number;
+  pages_investigated?: number;
+  pages_inaccessible?: number;
+  pages_skipped?: number;
+  technologies_found?: string[];
+  social_profiles?: Record<string, string>;
+  issues?: string[];
+  has_ssl?: boolean;
+  is_accessible?: boolean;
+  last_research_date?: string;
+  cache_hit?: boolean;
+}
+
+export interface BusinessOpportunity {
+  title: string;
+  service_category: string;
+  description: string;
+  rationale: string;
+  estimated_fit: 'HIGH' | 'MEDIUM' | 'LOW';
 }
 
 export interface ResearchReport {
   id: string;
+  official_company_name?: string;
+  canonical_domain?: string;
+  headquarters?: string;
+  business_locations?: string[];
+  founding_year?: string;
+
   company_overview?: string;
   business_model?: string;
   industry?: string;
+  secondary_industries?: string[];
   target_customers?: string;
   operating_countries: string[];
+
   main_products: string[];
   main_services: string[];
+  solutions_offered?: string[];
+  public_pricing_model?: string;
+
+  documented_clients?: string[];
+  partnerships?: string[];
+  case_studies_summary?: string[];
+
   tech_stack_detected: string[];
+  frameworks_and_platforms?: string[];
+  cloud_providers?: string[];
+  ai_automation_capabilities?: string[];
+
+  employee_count_verified?: string;
+  revenue_verified?: string;
+
   expansion_signals: string[];
   job_openings: string[];
-  outsourcing_opportunities: string[];
-  source_urls: string[];
+  digital_transformation_signals?: string[];
+  public_challenges?: string[];
+
+  business_opportunities?: BusinessOpportunity[];
+  outsourcing_opportunities: any[];
+  research_gaps?: string[];
+
   mobile_responsive: boolean;
   ssl_active: boolean;
   page_speed_grade: string;
@@ -88,9 +182,83 @@ export interface ResearchReport {
   social_profiles: Record<string, string>;
   website_issues: string[];
   digital_marketing_gaps: string[];
+  source_urls: string[];
+
+  // Dual Scoring System
+  company_fit_score: number;
+  research_confidence_score: number;
   confidence_score: number;
+  scoring_breakdown?: ScoringBreakdown;
+  scoring_version?: string;
+  scoring_calculated_at?: string;
+  qualification_status: 'QUALIFIED_HOT' | 'QUALIFIED_WARM' | 'LOW_PRIORITY' | 'INSUFFICIENT_EVIDENCE' | 'NOT_QUALIFIED' | 'PENDING';
+  qualification_display?: string;
+
+  research_coverage?: ResearchCoverage;
+
+  human_review_status?: 'PENDING' | 'APPROVED' | 'REJECTED' | 'RE_RESEARCH_REQUESTED';
+  human_review_display?: string;
+  reviewed_by?: string;
+  review_notes?: string;
+  reviewed_at?: string;
+
   executive_summary?: string;
   pages?: WebsitePage[];
+  findings?: IntelligenceFinding[];
+  research_date?: string;
+  updated_at?: string;
+}
+
+export interface ResearchJob {
+  id: string;
+  lead: string;
+  company?: string;
+  target_url: string;
+  normalized_url?: string;
+  status: 'PENDING' | 'CRAWLING' | 'EXTRACTING' | 'SCORING' | 'COMPLETED' | 'INSUFFICIENT_EVIDENCE' | 'FAILED' | 'CANCELLED';
+  status_display?: string;
+  progress_percent: number;
+  current_step: string;
+  pages_discovered_count: number;
+  pages_crawled_count: number;
+  pages_inaccessible_count: number;
+  pages_skipped_count: number;
+  is_cached: boolean;
+  error_message?: string;
+  started_at?: string;
+  completed_at?: string;
+  created_at: string;
+}
+
+export interface ICPConfig {
+  id: string;
+  name: string;
+  is_active: boolean;
+  description: string;
+  services_offered: Array<{
+    key: string;
+    name: string;
+    category: string;
+    description: string;
+  }>;
+  target_industries: string[];
+  target_company_types: string[];
+  preferred_company_size_min: number;
+  preferred_company_size_max: number;
+  geographic_markets: string[];
+  relevant_technologies: string[];
+  exclusion_criteria: string[];
+  weight_industry: number;
+  weight_service_fit: number;
+  weight_business_needs: number;
+  weight_company_size: number;
+  weight_tech_maturity: number;
+  weight_growth_signals: number;
+  weight_geography: number;
+  weight_contact_accessibility: number;
+  threshold_hot: number;
+  threshold_warm: number;
+  scoring_version: string;
 }
 
 export interface ServiceCatalogue {
