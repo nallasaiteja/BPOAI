@@ -28,60 +28,145 @@ class LeadIngestionService:
 
     @staticmethod
     def parse_csv(file_obj) -> List[Dict[str, Any]]:
+        import re
         decoded = file_obj.read().decode('utf-8', errors='ignore')
-        reader = csv.DictReader(io.StringIO(decoded))
-        leads = []
-        for row in reader:
-            normalized_row = {k.strip().lower().replace(" ", "_"): v.strip() for k, v in row.items() if k}
-            leads.append(normalized_row)
-        return leads
+        reader = csv.reader(io.StringIO(decoded))
+        all_rows = [row for row in reader if any(cell.strip() for cell in row)]
+        if not all_rows:
+            return []
 
-    @staticmethod
-    def parse_excel(file_obj) -> List[Dict[str, Any]]:
-        wb = openpyxl.load_workbook(file_obj, data_only=True)
-        sheet = wb.active
-        headers = [str(cell.value or '').strip().lower().replace(" ", "_") for cell in sheet[1]]
+        # Find the header row (row containing keywords or largest non-empty count)
+        header_idx = 0
+        for i, row in enumerate(all_rows[:5]):
+            row_str = " ".join(row).lower()
+            if any(k in row_str for k in ['company', 'email', 'name', 'lead', 'phone', 'contact']):
+                header_idx = i
+                break
+
+        raw_headers = all_rows[header_idx]
+        headers = [re.sub(r'[^a-z0-9]', '', str(h).lower()) for h in raw_headers]
         leads = []
-        for row in sheet.iter_rows(min_row=2, values_only=True):
-            if not any(row):
-                continue
+        for row in all_rows[header_idx + 1:]:
             item = {}
             for idx, h in enumerate(headers):
                 if h and idx < len(row):
                     item[h] = LeadIngestionService.clean_text(row[idx])
-            leads.append(item)
+            if item:
+                leads.append(item)
+        return leads
+
+    @staticmethod
+    def parse_excel(file_obj) -> List[Dict[str, Any]]:
+        import re
+        wb = openpyxl.load_workbook(file_obj, data_only=True)
+        sheet = wb.active
+        all_rows = list(sheet.iter_rows(values_only=True))
+        all_rows = [row for row in all_rows if any(cell is not None and str(cell).strip() != '' for cell in row)]
+        if not all_rows:
+            return []
+
+        # Find the header row (row containing keywords or first non-empty row)
+        header_idx = 0
+        for i, row in enumerate(all_rows[:5]):
+            row_str = " ".join([str(c or '') for c in row]).lower()
+            if any(k in row_str for k in ['company', 'email', 'name', 'lead', 'phone', 'contact']):
+                header_idx = i
+                break
+
+        raw_headers = all_rows[header_idx]
+        headers = [re.sub(r'[^a-z0-9]', '', str(h or '').lower()) for h in raw_headers]
+        leads = []
+        for row in all_rows[header_idx + 1:]:
+            item = {}
+            for idx, h in enumerate(headers):
+                if h and idx < len(row):
+                    item[h] = LeadIngestionService.clean_text(row[idx])
+            if item:
+                leads.append(item)
         return leads
 
     @classmethod
     def ingest_lead_batch(cls, raw_data_list: List[Dict[str, Any]], uploaded_by=None, source=LeadSource.CSV) -> Dict[str, Any]:
+        import re
         created_count = 0
         duplicate_count = 0
         missing_info_count = 0
         created_lead_ids = []
 
-        for item in raw_data_list:
-            # Map standard variations of column headers
-            company_name = item.get('company_name') or item.get('company') or item.get('organization') or ''
-            business_email = item.get('business_email') or item.get('email') or item.get('work_email') or ''
-            contact_person = item.get('contact_person') or item.get('name') or item.get('full_name') or ''
-            designation = item.get('designation') or item.get('title') or item.get('role') or ''
-            contact_number = item.get('contact_number') or item.get('phone') or item.get('mobile') or ''
-            country = item.get('country') or 'United States'
-            state = item.get('state') or ''
-            city = item.get('city') or ''
-            industry = item.get('industry') or ''
-            website_url = item.get('website_url') or item.get('website') or item.get('url') or ''
+        # Common public free email domains
+        GENERIC_DOMAINS = {'gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'icloud.com', 'aol.com', 'mail.com'}
 
+        for item in raw_data_list:
+            # Flexible helper: match keys ignoring underscores/spaces/symbols
+            def get_val(*possible_keys):
+                for pk in possible_keys:
+                    norm_pk = re.sub(r'[^a-z0-9]', '', pk.lower())
+                    if norm_pk in item and item[norm_pk]:
+                        return item[norm_pk]
+                return ''
+
+            company_name = get_val(
+                'company_name', 'company', 'organization', 'organization_name', 
+                'business', 'business_name', 'client', 'client_name', 
+                'account', 'account_name', 'firm', 'firm_name', 'lead_name', 'companyname'
+            )
+            business_email = get_val(
+                'business_email', 'email', 'work_email', 'contact_email', 
+                'corporate_email', 'email_address', 'emailaddress', 'mail', 
+                'mail_id', 'email_id', 'e_mail'
+            )
+            contact_person = get_val(
+                'contact_person', 'contact', 'full_name', 'name', 
+                'person', 'representative', 'contact_name', 'lead_contact'
+            )
+            designation = get_val('designation', 'title', 'role', 'job_title', 'position')
+            contact_number = get_val('contact_number', 'phone', 'phone_number', 'mobile', 'mobile_number', 'tel', 'cell')
+            country = get_val('country', 'nation', 'location') or 'United States'
+            state = get_val('state', 'province', 'region')
+            city = get_val('city', 'town')
+            industry = get_val('industry', 'sector', 'vertical', 'category')
+            website_url = get_val('website_url', 'website', 'url', 'web', 'domain', 'site', 'link')
+
+            # Fallback 1: If email column was not explicitly named, search all item values for an email regex
+            if not business_email:
+                for val in item.values():
+                    match = re.search(r'[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+', str(val))
+                    if match:
+                        business_email = match.group(0)
+                        break
+
+            # Fallback 2: If company name wasn't provided, but contact name was
+            if not company_name and contact_person:
+                # If there's only a single 'name' column and no other company, see if it represents company or person
+                company_name = contact_person
+
+            # Fallback 3: If company name is still missing, derive company from corporate email domain
+            if not company_name and business_email and '@' in business_email:
+                domain_part = business_email.split('@')[-1].lower()
+                if domain_part not in GENERIC_DOMAINS:
+                    base_domain = domain_part.split('.')[0]
+                    company_name = base_domain.capitalize()
+
+            # Fallback 4: Auto-populate website if missing and email domain is corporate
+            if not website_url and business_email and '@' in business_email:
+                domain_part = business_email.split('@')[-1].lower()
+                if domain_part not in GENERIC_DOMAINS:
+                    website_url = f"https://{domain_part}"
+
+            # Both company_name and business_email are required
             if not company_name or not business_email:
                 missing_info_count += 1
                 continue
 
-            # Standardize email
+            # Standardize email & company
             clean_email = business_email.strip().lower()
             clean_company = company_name.strip()
 
             # Deduplication check
-            existing = Lead.objects.filter(business_email__iexact=clean_email, company_name__iexact=clean_company).first()
+            existing = Lead.objects.filter(business_email__iexact=clean_email).first()
+            if not existing:
+                existing = Lead.objects.filter(company_name__iexact=clean_company).first()
+
             if existing:
                 duplicate_count += 1
                 continue
@@ -110,8 +195,10 @@ class LeadIngestionService:
             'created_count': created_count,
             'duplicate_count': duplicate_count,
             'missing_info_count': missing_info_count,
-            'lead_ids': created_lead_ids
+            'lead_ids': created_lead_ids,
+            'message': f"Ingested {created_count} new leads ({duplicate_count} duplicates skipped, {missing_info_count} missing info)."
         }
+
 
 
 class EmailDomainIntelligenceService:

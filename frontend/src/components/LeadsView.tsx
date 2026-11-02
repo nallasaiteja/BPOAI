@@ -564,7 +564,8 @@ export const LeadsView: React.FC<LeadsViewProps> = ({
               <div className="border-2 border-dashed border-slate-300 rounded-xl p-6 text-center hover:border-blue-500 transition-colors">
                 <Upload className="w-8 h-8 text-blue-600 mx-auto mb-2" />
                 <p className="text-xs font-medium text-slate-700 mb-1">Select Excel (.xlsx) or CSV file</p>
-                <p className="text-[11px] text-slate-400 mb-3">Auto-deduplication & cleaning applied on upload.</p>
+                <p className="text-[11px] text-slate-400 mb-2">Supported columns: <b>Company Name</b>, <b>Business Email</b>, Contact Person, Phone, Website, Industry.</p>
+                <p className="text-[10px] text-blue-600 bg-blue-50 py-1 px-2 rounded mb-3">Auto-deduplication & cleaning applied automatically.</p>
                 <input
                   type="file"
                   accept=".csv, .xlsx, .xls"

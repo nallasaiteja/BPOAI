@@ -128,11 +128,19 @@ export const App: React.FC = () => {
   // Handlers
   const handleUploadLeads = async (file: File) => {
     try {
-      await api.uploadLeads(file);
-      showToast(`Successfully ingested leads from ${file.name}. AI processing started.`);
+      const res: any = await api.uploadLeads(file);
+      if (res && res.created_count > 0) {
+        showToast(`Successfully ingested ${res.created_count} lead(s) from ${file.name}. AI processing started.`);
+      } else if (res && res.duplicate_count > 0 && res.created_count === 0) {
+        showToast(`Skipped: All ${res.duplicate_count} lead(s) in ${file.name} already exist in database.`);
+      } else if (res && res.missing_info_count > 0 && res.created_count === 0) {
+        showToast(`No leads created: columns in ${file.name} missing Company Name or Email.`);
+      } else {
+        showToast(res?.message || `Processed ${file.name}.`);
+      }
       await loadData();
-    } catch {
-      showToast(`Uploaded ${file.name}. Deduplication and AI pipeline queued.`);
+    } catch (err: any) {
+      showToast(`Upload failed: ${err?.error || err?.message || 'Could not parse file.'}`);
     }
   };
 
