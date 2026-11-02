@@ -366,7 +366,8 @@ class LeadViewSet(viewsets.ModelViewSet):
         """
         Deletes all leads and all associated pipeline data across all sections.
         """
-        from research.models import Company, CompanyResearchReport
+        from leads.models import Company
+        from research.models import ResearchReport, ResearchSource
         from communications.models import EmailDraft, SentEmail, EmailReply, FollowUpSchedule
         from proposals.models import Proposal, Quotation
         from requirements_ai.models import BusinessRequirement, LeadScore
@@ -378,7 +379,8 @@ class LeadViewSet(viewsets.ModelViewSet):
         Proposal.objects.all().delete()
         Quotation.objects.all().delete()
         BusinessRequirement.objects.all().delete()
-        CompanyResearchReport.objects.all().delete()
+        ResearchReport.objects.all().delete()
+        ResearchSource.objects.all().delete()
 
         return Response({
             'success': True,
