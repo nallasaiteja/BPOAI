@@ -9,6 +9,9 @@ import openpyxl
 
 logger = logging.getLogger(__name__)
 
+# User-controlled automated crawling & outreach pipeline status (Stopped by default)
+AUTO_PIPELINE_ACTIVE = False
+
 # Maximum file size: 15 MB
 MAX_FILE_SIZE_BYTES = 15 * 1024 * 1024
 MAX_ROW_LIMIT = 50000
@@ -522,8 +525,8 @@ class IntelligentIngestionEngine:
         ]
 
         # Pre-fetch existing emails and companies in database for quick set membership lookup
-        existing_emails = set(Lead.objects.values_list('business_email', flat=True))
-        existing_companies = set(Lead.objects.values_list('company_name', flat=True))
+        existing_emails = {e.lower().strip() for e in Lead.objects.values_list('business_email', flat=True) if e}
+        existing_companies = {re.sub(r'[^a-zA-Z0-9]', '', c.lower()) for c in Lead.objects.values_list('company_name', flat=True) if c}
 
         valid_records: List[Dict[str, Any]] = []
         preview_records: List[Dict[str, Any]] = []
@@ -605,7 +608,7 @@ class IntelligentIngestionEngine:
             if clean_email and clean_email in existing_emails:
                 is_duplicate = True
                 errors.append(f"Duplicate contact: '{clean_email}' already exists in CRM database")
-            elif clean_company and clean_company in existing_companies:
+            elif clean_company_normalized and clean_company_normalized in existing_companies:
                 is_duplicate = True
                 errors.append(f"Duplicate company: '{clean_company}' already exists in CRM database")
             elif clean_email and clean_email in seen_file_emails:
@@ -748,15 +751,16 @@ class IntelligentIngestionEngine:
                 except Exception as e:
                     logger.warning(f"Domain analysis failed for lead {lead.id}: {e}")
 
-        # Automatically start website crawling, research, and outreach preparation in the background for all verified leads
-        verified_lead_ids = [str(l.id) for l in created_leads if l.is_company_verified]
-        if verified_lead_ids:
-            import threading
-            threading.Thread(
-                target=cls.process_verified_leads_to_outreach,
-                args=(verified_lead_ids,),
-                daemon=True
-            ).start()
+        # Only start background crawling if the user has explicitly started the automated pipeline
+        if cls.is_auto_pipeline_active():
+            verified_lead_ids = [str(l.id) for l in created_leads if l.is_company_verified]
+            if verified_lead_ids:
+                import threading
+                threading.Thread(
+                    target=cls.process_verified_leads_to_outreach,
+                    args=(verified_lead_ids,),
+                    daemon=True
+                ).start()
 
         return {
             'batch_id': str(batch.id),
@@ -769,12 +773,27 @@ class IntelligentIngestionEngine:
         }
 
     @classmethod
+    def set_auto_pipeline(cls, active: bool) -> None:
+        global AUTO_PIPELINE_ACTIVE
+        AUTO_PIPELINE_ACTIVE = bool(active)
+        logger.info(f"Automated pipeline status set to: {'ACTIVE' if AUTO_PIPELINE_ACTIVE else 'STOPPED'}")
+
+    @classmethod
+    def is_auto_pipeline_active(cls) -> bool:
+        global AUTO_PIPELINE_ACTIVE
+        return AUTO_PIPELINE_ACTIVE
+
+    @classmethod
     def _process_single_lead(cls, lead_id: str) -> None:
         from .models import Lead, LeadStatus
         from research.services import CompanyResearchService
         from requirements_ai.services import RequirementAnalysisService
         from communications.services import EmailDraftingService
         from django.db import connection
+
+        if not cls.is_auto_pipeline_active():
+            logger.info(f"Automated pipeline stopped by user. Skipping lead {lead_id}.")
+            return
 
         try:
             lead = Lead.objects.filter(id=lead_id).first()
@@ -784,10 +803,13 @@ class IntelligentIngestionEngine:
             # 1. Controlled website crawling and evidence extraction ($0 AI cost)
             report, _ = CompanyResearchService.initialize_and_run(lead_id=str(lead.id), force_refresh=False)
 
+            if not cls.is_auto_pipeline_active():
+                return
+
             # 2. Extract requirements
             RequirementAnalysisService.analyze_requirements_for_lead(lead)
 
-            # 3. Generate tailored outreach email draft & proposal
+            # 3. Generate tailored outreach email draft
             EmailDraftingService.generate_draft_for_lead(lead)
 
             # 4. Mark report approved and advance lead to outreach queue
@@ -810,10 +832,14 @@ class IntelligentIngestionEngine:
         Background worker that processes verified leads:
         Crawls company website using fast deterministic engine ($0 AI cost),
         extracts structured intelligence, identifies BPO requirements,
-        generates personalized email draft & proposal,
+        generates personalized email draft,
         and transitions the lead to AWAITING_APPROVAL for the email outreach queue.
+        Can be stopped at any time by user.
         """
         for lead_id in lead_ids:
+            if not cls.is_auto_pipeline_active():
+                logger.info("Automated pipeline stopped by user. Halting remaining queue.")
+                break
             cls._process_single_lead(lead_id)
 
 

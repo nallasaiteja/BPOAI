@@ -4,7 +4,8 @@ import {
   ExternalLink, Layers, Search, Cpu, Target, Flag, Bug, Loader2, Trash2,
   RefreshCw, Sparkles, ShieldAlert, Award, FileText, Check, HelpCircle,
   XCircle, ChevronRight, Sliders, ArrowUpRight, Clock, Users, DollarSign,
-  Briefcase, Compass, FileCheck, ThumbsUp, ThumbsDown, Mail, Brain, Zap
+  Briefcase, Compass, FileCheck, ThumbsUp, ThumbsDown, Mail, Brain, Zap,
+  Play, Square
 } from 'lucide-react';
 import { Lead, ResearchReport, ICPConfig, ResearchJob } from '../types';
 import { api } from '../services/api';
@@ -46,18 +47,26 @@ export const CompanyResearchView: React.FC<CompanyResearchViewProps> = ({
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [isInvestigating, setIsInvestigating] = useState(false);
   const [isAiInvestigating, setIsAiInvestigating] = useState(false);
-  const [isAutoProcessing, setIsAutoProcessing] = useState(false);
   const [isRecalculating, setIsRecalculating] = useState(false);
   const [isReviewing, setIsReviewing] = useState(false);
+  const [mobileView, setMobileView] = useState<'list' | 'detail'>('list');
+
+  // User-controlled Automated Pipeline status (Stopped by default)
+  const [isPipelineRunning, setIsPipelineRunning] = useState<boolean>(false);
+  const [isTogglingPipeline, setIsTogglingPipeline] = useState<boolean>(false);
 
   // ICP Config Modal State
   const [isICPModalOpen, setIsICPModalOpen] = useState(false);
   const [icpConfig, setIcpConfig] = useState<ICPConfig | null>(null);
 
-  // Load ICP Config
+  // Load ICP Config & Pipeline Status
   useEffect(() => {
     api.getActiveICPConfig()
       .then(setIcpConfig)
+      .catch(() => null);
+
+    api.getPipelineStatus()
+      .then(res => setIsPipelineRunning(res.is_running))
       .catch(() => null);
   }, []);
 
@@ -76,25 +85,34 @@ export const CompanyResearchView: React.FC<CompanyResearchViewProps> = ({
     l => l.lead_status !== 'AWAITING_APPROVAL' && !l.is_email_generated
   ).length;
 
-  // Auto-process any verified leads into the outreach queue automatically
-  useEffect(() => {
-    if (verifiedPendingOutreach > 0 && !isAutoProcessing) {
-      api.autoProcessVerifiedLeads()
-        .then(() => {
-          // background processing spawned
-        })
-        .catch(() => null);
+  const handleTogglePipeline = async () => {
+    setIsTogglingPipeline(true);
+    try {
+      if (isPipelineRunning) {
+        const res = await api.stopPipeline();
+        setIsPipelineRunning(false);
+        if (showToast) showToast(res?.message || 'Automated pipeline stopped.');
+      } else {
+        const res = await api.startPipeline();
+        setIsPipelineRunning(true);
+        if (showToast) showToast(res?.message || 'Automated pipeline started.');
+      }
+      if (onRefresh) await onRefresh();
+    } catch (e: any) {
+      alert('Pipeline control error: ' + (e?.message || 'Failed to toggle pipeline'));
+    } finally {
+      setIsTogglingPipeline(false);
     }
-  }, [verifiedPendingOutreach]);
+  };
 
-  // Periodically refresh data while background processing is working through the verified queue
+  // Periodically refresh data ONLY while the automated pipeline is explicitly running and has pending items
   useEffect(() => {
-    if (verifiedPendingOutreach === 0 || !onRefresh) return;
+    if (!isPipelineRunning || verifiedPendingOutreach === 0 || !onRefresh) return;
     const interval = setInterval(() => {
       onRefresh();
     }, 4000);
     return () => clearInterval(interval);
-  }, [verifiedPendingOutreach, onRefresh]);
+  }, [isPipelineRunning, verifiedPendingOutreach, onRefresh]);
 
   const activeLead = verifiedLeads.find(l => l.id === selectedLeadId);
   const report: ResearchReport | undefined = activeLead?.research_report;
@@ -154,21 +172,6 @@ export const CompanyResearchView: React.FC<CompanyResearchViewProps> = ({
       alert('AI Investigation error: ' + (err?.message || 'Failed to complete AI analysis'));
     } finally {
       setIsAiInvestigating(false);
-    }
-  };
-
-  const handleAutoProcessVerified = async () => {
-    setIsAutoProcessing(true);
-    try {
-      const res = await api.autoProcessVerifiedLeads();
-      if (showToast) {
-        showToast(res?.message || 'Started automated processing for verified leads.');
-      }
-      if (onRefresh) await onRefresh();
-    } catch (err: any) {
-      alert('Error triggering auto-processing: ' + (err?.message || 'Failed'));
-    } finally {
-      setIsAutoProcessing(false);
     }
   };
 
@@ -313,8 +316,8 @@ export const CompanyResearchView: React.FC<CompanyResearchViewProps> = ({
             <span className="text-xs font-bold text-slate-700 truncate">{icpConfig?.name || 'Default ICP'}</span>
             <button
               onClick={() => setIsICPModalOpen(true)}
-              className="text-blue-600 hover:text-blue-700 p-1 rounded hover:bg-blue-50"
-              title="Configure ICP Weights"
+              className="text-blue-600 hover:text-blue-700 p-1 rounded hover:bg-blue-50 cursor-pointer"
+              title="Configure ICP: View and adjust target industries, company sizes, services, and 100-point scoring weights."
             >
               <Sliders className="w-3.5 h-3.5" />
             </button>
@@ -355,7 +358,7 @@ export const CompanyResearchView: React.FC<CompanyResearchViewProps> = ({
             <button
               onClick={onDeleteAll}
               className="px-3 py-1.5 text-xs font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
-              title="Delete all leads and intelligence data"
+              title="Delete All Leads: Permanently clears all imported prospects, crawled intelligence, and generated reports from the CRM."
             >
               <Trash2 className="w-3.5 h-3.5" />
               <span>Delete All Data</span>
@@ -365,6 +368,7 @@ export const CompanyResearchView: React.FC<CompanyResearchViewProps> = ({
           <button
             onClick={() => setIsICPModalOpen(true)}
             className="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
+            title="Configure ICP Weights & Criteria: Customize our company's target customer profile, offered services, and lead scoring weights."
           >
             <Sliders className="w-3.5 h-3.5 text-slate-500" />
             <span>ICP Weights & Criteria</span>
@@ -372,53 +376,115 @@ export const CompanyResearchView: React.FC<CompanyResearchViewProps> = ({
         </div>
       </div>
 
-      {/* Automated Pipeline Notification Banner */}
-      {verifiedPendingOutreach > 0 && (
-        <div className="mb-4 px-4 py-3 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl flex flex-wrap items-center justify-between gap-3 text-xs text-blue-900 shadow-2xs">
-          <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-lg bg-blue-600 text-white flex items-center justify-center shrink-0">
-              <Zap className="w-4 h-4" />
-            </div>
-            <div>
-              <span className="font-bold text-slate-800">Automated Pipeline Active:</span>{' '}
-              <span>{verifiedPendingOutreach} verified lead(s) are being crawled and pushed to Email Outreach automatically.</span>
-            </div>
+      {/* SECTION: User-Managed Automated Pipeline Control */}
+      <div className={`mb-4 px-4 py-3 rounded-xl border flex flex-wrap items-center justify-between gap-3 text-xs shadow-2xs transition-all ${
+        isPipelineRunning 
+          ? 'bg-gradient-to-r from-emerald-50 to-blue-50 border-emerald-200 text-emerald-950' 
+          : 'bg-slate-50 border-slate-200 text-slate-700'
+      }`}>
+        <div className="flex items-center gap-2.5">
+          <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+            isPipelineRunning ? 'bg-emerald-600 text-white animate-pulse' : 'bg-slate-200 text-slate-600'
+          }`}>
+            {isPipelineRunning ? <Zap className="w-4 h-4" /> : <Play className="w-4 h-4" />}
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleAutoProcessVerified}
-              disabled={isAutoProcessing}
-              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow-2xs flex items-center gap-1.5 transition-colors disabled:opacity-50"
-            >
-              {isAutoProcessing ? (
-                <>
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  <span>Processing Queue...</span>
-                </>
-              ) : (
-                <>
-                  <RefreshCw className="w-3.5 h-3.5" />
-                  <span>Sync Outreach Queue</span>
-                </>
-              )}
-            </button>
-            {onNavigate && (
-              <button
-                onClick={() => onNavigate('approvals')}
-                className="px-3 py-1.5 bg-white hover:bg-slate-50 text-blue-700 border border-blue-300 font-semibold rounded-lg shadow-2xs flex items-center gap-1 transition-colors"
-              >
-                <span>View Email Outreach &rarr;</span>
-              </button>
-            )}
+          <div>
+            <div className="flex items-center gap-2 font-bold text-slate-800">
+              <span>Automated Pipeline:</span>
+              <span className={`px-2 py-0.5 rounded text-[10px] font-semibold tracking-wider uppercase ${
+                isPipelineRunning 
+                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' 
+                  : 'bg-slate-200 text-slate-700 border border-slate-300'
+              }`}>
+                {isPipelineRunning ? 'Running' : 'Stopped / Manual'}
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-500 mt-0.5">
+              {isPipelineRunning 
+                ? `Actively crawling websites and preparing outreach drafts (${verifiedPendingOutreach} pending in queue).` 
+                : verifiedPendingOutreach > 0
+                  ? `${verifiedPendingOutreach} verified lead(s) waiting. Click "Start Pipeline" to process automatically, or inspect manually.`
+                  : 'All verified leads are up to date. Start pipeline anytime to auto-process newly imported verified leads.'}
+            </p>
           </div>
         </div>
-      )}
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleTogglePipeline}
+            disabled={isTogglingPipeline}
+            title={
+              isPipelineRunning
+                ? "Stop Pipeline: Immediately pause/halt automated website crawling and email drafting for pending verified leads."
+                : "Start Pipeline: Start background website crawler and outreach drafter for all verified companies."
+            }
+            className={`px-3.5 py-1.5 font-semibold rounded-lg shadow-2xs flex items-center gap-1.5 transition-colors disabled:opacity-50 cursor-pointer ${
+              isPipelineRunning
+                ? 'bg-rose-600 hover:bg-rose-700 text-white'
+                : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+            }`}
+          >
+            {isTogglingPipeline ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                <span>Updating...</span>
+              </>
+            ) : isPipelineRunning ? (
+              <>
+                <Square className="w-3.5 h-3.5 fill-current" />
+                <span>Stop Pipeline</span>
+              </>
+            ) : (
+              <>
+                <Play className="w-3.5 h-3.5 fill-current" />
+                <span>Start Pipeline</span>
+              </>
+            )}
+          </button>
+
+          {onNavigate && (
+            <button
+              onClick={() => onNavigate('approvals')}
+              className="px-3 py-1.5 bg-white hover:bg-slate-50 text-blue-700 border border-slate-300 font-semibold rounded-lg shadow-2xs flex items-center gap-1 transition-colors cursor-pointer"
+              title="View Outreach Queue: Jump to the Email Outreach tab to review, edit, or approve personalized emails waiting for human dispatch."
+            >
+              <span>View Outreach Queue &rarr;</span>
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Mobile / Tablet Segmented View Switcher */}
+      <div className="lg:hidden flex items-center p-1 bg-slate-100 rounded-xl border border-slate-200">
+        <button
+          onClick={() => setMobileView('list')}
+          className={`flex-1 py-2 text-xs font-bold rounded-lg text-center transition-all cursor-pointer ${
+            mobileView === 'list'
+              ? 'bg-white text-blue-700 shadow-xs'
+              : 'text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          Prospects ({filteredLeads.length})
+        </button>
+        <button
+          onClick={() => setMobileView('detail')}
+          className={`flex-1 py-2 text-xs font-bold rounded-lg text-center transition-all cursor-pointer ${
+            mobileView === 'detail'
+              ? 'bg-white text-blue-700 shadow-xs'
+              : 'text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          Company Dossier {activeLead ? `(${activeLead.company_name.slice(0, 12)}...)` : ''}
+        </button>
+      </div>
 
       {/* SECTION 3: Main Split Workspace */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
         
         {/* Left Side: Companies Directory */}
-        <div className="lg:col-span-4 bg-white rounded-xl border border-slate-200 p-3 shadow-xs space-y-2">
+        <div className={`lg:col-span-4 bg-white rounded-xl border border-slate-200 p-3 shadow-xs space-y-2 ${
+          mobileView === 'list' ? 'block' : 'hidden lg:block'
+        }`}>
           <div className="flex items-center justify-between border-b border-slate-100 pb-2 px-1">
             <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
               Prospects ({filteredLeads.length})
@@ -437,7 +503,10 @@ export const CompanyResearchView: React.FC<CompanyResearchViewProps> = ({
                 return (
                   <div
                     key={lead.id}
-                    onClick={() => setSelectedLeadId(lead.id)}
+                    onClick={() => {
+                      setSelectedLeadId(lead.id);
+                      setMobileView('detail');
+                    }}
                     className={`p-3 rounded-xl border text-xs transition-all cursor-pointer group ${
                       isSelected 
                         ? 'border-blue-600 bg-blue-50/60 shadow-xs' 
@@ -507,12 +576,20 @@ export const CompanyResearchView: React.FC<CompanyResearchViewProps> = ({
         </div>
 
         {/* Right Side: Deep Company Intelligence Dossier */}
-        <div className="lg:col-span-8 space-y-4">
+        <div className={`lg:col-span-8 space-y-4 ${
+          mobileView === 'detail' ? 'block' : 'hidden lg:block'
+        }`}>
           {activeLead ? (
             <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
               
               {/* Header Profile Bar */}
-              <div className="p-5 border-b border-slate-200 bg-slate-50/70">
+              <div className="p-4 sm:p-5 border-b border-slate-200 bg-slate-50/70">
+                <button
+                  onClick={() => setMobileView('list')}
+                  className="lg:hidden inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700 hover:text-blue-900 mb-3 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg border border-blue-200 transition-colors cursor-pointer"
+                >
+                  &larr; Back to Prospects List
+                </button>
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                   <div>
                     <div className="flex items-center gap-2.5">
@@ -554,8 +631,8 @@ export const CompanyResearchView: React.FC<CompanyResearchViewProps> = ({
                       <button
                         onClick={() => handleInvestigate(activeLead.id, !!report)}
                         disabled={isInvestigating}
-                        className="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 rounded-lg shadow-2xs flex items-center gap-1.5 transition-colors disabled:opacity-50"
-                        title="Fast, deterministic website crawling & structured fact extraction ($0 AI cost)"
+                        className="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 rounded-lg shadow-2xs flex items-center gap-1.5 transition-colors disabled:opacity-50 cursor-pointer"
+                        title="Crawl Website (Free, $0 Cost): Run deterministic rule-based crawler across robots.txt, sitemaps, and core company pages to extract verified business facts."
                       >
                         {isInvestigating ? (
                           <>
@@ -573,8 +650,8 @@ export const CompanyResearchView: React.FC<CompanyResearchViewProps> = ({
                       <button
                         onClick={() => handleAiInvestigate(activeLead.id)}
                         disabled={isAiInvestigating}
-                        className="px-3 py-1.5 text-xs font-semibold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-lg shadow-2xs flex items-center gap-1.5 transition-colors disabled:opacity-50"
-                        title="Explicit on-demand AI deep investigation using Gemini LLM for this specific lead"
+                        className="px-3 py-1.5 text-xs font-semibold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-lg shadow-2xs flex items-center gap-1.5 transition-colors disabled:opacity-50 cursor-pointer"
+                        title="AI Deep Investigation: Launch Gemini AI to analyze crawled content, synthesize deep capabilities, and find tailored BPO/software opportunities."
                       >
                         {isAiInvestigating ? (
                           <>
@@ -594,8 +671,8 @@ export const CompanyResearchView: React.FC<CompanyResearchViewProps> = ({
                           <button
                             onClick={() => handleRecalculateScore(activeLead.id)}
                             disabled={isRecalculating}
-                            className="p-1.5 text-slate-600 hover:text-slate-800 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
-                            title="Recalculate Score against current ICP"
+                            className="p-1.5 text-slate-600 hover:text-slate-800 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer"
+                            title="Recalculate Fit Score: Re-evaluates all findings against active Ideal Customer Profile (ICP) weights and updates the 100-point score."
                           >
                             <RefreshCw className={`w-3.5 h-3.5 ${isRecalculating ? 'animate-spin' : ''}`} />
                           </button>
@@ -603,8 +680,8 @@ export const CompanyResearchView: React.FC<CompanyResearchViewProps> = ({
                           <button
                             onClick={() => handleApproveReport(activeLead.id)}
                             disabled={isReviewing}
-                            className="px-3 py-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition-colors flex items-center gap-1.5 shadow-2xs"
-                            title="Approve report and generate personalized email outreach"
+                            className="px-3 py-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition-colors flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                            title="Approve & Send to Outreach: Gives senior sign-off to this intelligence report and generates a personalized cold intro email draft in the Outreach Approval Queue."
                           >
                             <ThumbsUp className="w-3.5 h-3.5" />
                             <span>{report.human_review_status === 'APPROVED' ? 'Re-Approve & Outreach' : 'Approve & Send to Outreach'}</span>
@@ -613,8 +690,8 @@ export const CompanyResearchView: React.FC<CompanyResearchViewProps> = ({
                           {(activeLead.is_email_generated || report.human_review_status === 'APPROVED') && onNavigate && (
                             <button
                               onClick={() => onNavigate('approvals')}
-                              className="px-3 py-1.5 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition-colors flex items-center gap-1.5 shadow-2xs"
-                              title="Open Email Outreach queue to inspect and send generated draft"
+                              className="px-3 py-1.5 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition-colors flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                              title="View in Email Outreach: Navigate to Email Outreach tab to review, edit, or dispatch the personalized email draft."
                             >
                               <Mail className="w-3.5 h-3.5 text-blue-600" />
                               <span>View in Email Outreach &rarr;</span>
@@ -624,11 +701,25 @@ export const CompanyResearchView: React.FC<CompanyResearchViewProps> = ({
                           <button
                             onClick={() => handleRejectReport(activeLead.id)}
                             disabled={isReviewing}
-                            className="p-1.5 text-rose-600 hover:text-rose-800 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-colors"
-                            title="Disqualify prospect"
+                            className="p-1.5 text-rose-600 hover:text-rose-800 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-colors cursor-pointer"
+                            title="Disqualify Company: Flags this lead as unqualified or lacking sufficient public evidence for outbound sales."
                           >
                             <ThumbsDown className="w-3.5 h-3.5" />
                           </button>
+
+                          {onDeleteLead && (
+                            <button
+                              onClick={() => {
+                                if (window.confirm(`Delete lead '${activeLead.company_name}' and all associated intelligence?`)) {
+                                  onDeleteLead(activeLead.id);
+                                }
+                              }}
+                              className="p-1.5 text-rose-500 hover:text-rose-700 bg-white hover:bg-rose-50 border border-slate-200 hover:border-rose-200 rounded-lg transition-colors cursor-pointer"
+                              title="Delete Lead: Permanently delete this company and its research from the CRM."
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                         </>
                       )}
                     </div>
@@ -660,83 +751,93 @@ export const CompanyResearchView: React.FC<CompanyResearchViewProps> = ({
               {/* 10 Navigation Tabs */}
               {report ? (
                 <div>
-                  <div className="flex items-center gap-1 px-4 border-b border-slate-200 overflow-x-auto text-xs bg-slate-50/30">
+                  <div className="flex items-center gap-1.5 px-3 sm:px-4 py-2 border-b border-slate-200 overflow-x-auto no-scrollbar text-xs bg-slate-50/50">
                     <button
                       onClick={() => setActiveTab('overview')}
-                      className={`py-2.5 px-3 font-semibold border-b-2 transition-colors whitespace-nowrap ${
-                        activeTab === 'overview' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'
+                      title="1. Overview: Executive summary, company description, business model, and high-level fit scorecard."
+                      className={`py-1.5 px-3 font-semibold rounded-lg transition-all whitespace-nowrap cursor-pointer shrink-0 ${
+                        activeTab === 'overview' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-200/70 hover:text-slate-900'
                       }`}
                     >
                       1. Overview
                     </button>
                     <button
                       onClick={() => setActiveTab('website')}
-                      className={`py-2.5 px-3 font-semibold border-b-2 transition-colors whitespace-nowrap ${
-                        activeTab === 'website' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'
+                      title="2. Website: Discovered pages, crawl depth, HTTP status, robots.txt compliance, and sitemap detection."
+                      className={`py-1.5 px-3 font-semibold rounded-lg transition-all whitespace-nowrap cursor-pointer shrink-0 ${
+                        activeTab === 'website' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-200/70 hover:text-slate-900'
                       }`}
                     >
                       2. Website ({report.pages?.length || 0})
                     </button>
                     <button
                       onClick={() => setActiveTab('products_services')}
-                      className={`py-2.5 px-3 font-semibold border-b-2 transition-colors whitespace-nowrap ${
-                        activeTab === 'products_services' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'
+                      title="3. Products & Services: Identified product catalog, core business services, solutions offered, and publicly stated pricing."
+                      className={`py-1.5 px-3 font-semibold rounded-lg transition-all whitespace-nowrap cursor-pointer shrink-0 ${
+                        activeTab === 'products_services' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-200/70 hover:text-slate-900'
                       }`}
                     >
                       3. Products & Services
                     </button>
                     <button
                       onClick={() => setActiveTab('market')}
-                      className={`py-2.5 px-3 font-semibold border-b-2 transition-colors whitespace-nowrap ${
-                        activeTab === 'market' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'
+                      title="4. Market & Clients: Operating countries, target customer segments, B2B/B2C classification, and documented clients/partners."
+                      className={`py-1.5 px-3 font-semibold rounded-lg transition-all whitespace-nowrap cursor-pointer shrink-0 ${
+                        activeTab === 'market' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-200/70 hover:text-slate-900'
                       }`}
                     >
                       4. Market & Clients
                     </button>
                     <button
                       onClick={() => setActiveTab('technology')}
-                      className={`py-2.5 px-3 font-semibold border-b-2 transition-colors whitespace-nowrap ${
-                        activeTab === 'technology' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'
+                      title="5. Technology: Detected web technologies, programming frameworks, cloud infrastructure, and technical maturity."
+                      className={`py-1.5 px-3 font-semibold rounded-lg transition-all whitespace-nowrap cursor-pointer shrink-0 ${
+                        activeTab === 'technology' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-200/70 hover:text-slate-900'
                       }`}
                     >
                       5. Technology
                     </button>
                     <button
                       onClick={() => setActiveTab('signals')}
-                      className={`py-2.5 px-3 font-semibold border-b-2 transition-colors whitespace-nowrap ${
-                        activeTab === 'signals' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'
+                      title="6. Signals & Hiring: Growth signals, open job positions, expansion announcements, and transformation initiatives."
+                      className={`py-1.5 px-3 font-semibold rounded-lg transition-all whitespace-nowrap cursor-pointer shrink-0 ${
+                        activeTab === 'signals' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-200/70 hover:text-slate-900'
                       }`}
                     >
                       6. Signals & Hiring
                     </button>
                     <button
                       onClick={() => setActiveTab('evidence')}
-                      className={`py-2.5 px-3 font-semibold border-b-2 transition-colors whitespace-nowrap ${
-                        activeTab === 'evidence' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'
+                      title="7. Evidence & Sources: Transparent audit log of exact text snippets, source page URLs, confidence levels, and timestamps."
+                      className={`py-1.5 px-3 font-semibold rounded-lg transition-all whitespace-nowrap cursor-pointer shrink-0 ${
+                        activeTab === 'evidence' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-200/70 hover:text-slate-900'
                       }`}
                     >
                       7. Evidence & Sources ({report.findings?.length || 0})
                     </button>
                     <button
                       onClick={() => setActiveTab('opportunities')}
-                      className={`py-2.5 px-3 font-semibold border-b-2 transition-colors whitespace-nowrap ${
-                        activeTab === 'opportunities' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'
+                      title="8. BPO Opportunities: Identified operational pain points mapped directly to our BPO and software automation services."
+                      className={`py-1.5 px-3 font-semibold rounded-lg transition-all whitespace-nowrap cursor-pointer shrink-0 ${
+                        activeTab === 'opportunities' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-200/70 hover:text-slate-900'
                       }`}
                     >
                       8. BPO Opportunities
                     </button>
                     <button
                       onClick={() => setActiveTab('scoring')}
-                      className={`py-2.5 px-3 font-semibold border-b-2 transition-colors whitespace-nowrap ${
-                        activeTab === 'scoring' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'
+                      title="9. Scoring Breakdown: Complete explainable 100-point company fit score with category weights and mathematical formula."
+                      className={`py-1.5 px-3 font-semibold rounded-lg transition-all whitespace-nowrap cursor-pointer shrink-0 ${
+                        activeTab === 'scoring' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-200/70 hover:text-slate-900'
                       }`}
                     >
                       9. Scoring Breakdown
                     </button>
                     <button
                       onClick={() => setActiveTab('history_icp')}
-                      className={`py-2.5 px-3 font-semibold border-b-2 transition-colors whitespace-nowrap ${
-                        activeTab === 'history_icp' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'
+                      title="10. Audit & ICP: Historical crawling job execution logs and side-by-side comparison against active ICP configuration."
+                      className={`py-1.5 px-3 font-semibold rounded-lg transition-all whitespace-nowrap cursor-pointer shrink-0 ${
+                        activeTab === 'history_icp' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-200/70 hover:text-slate-900'
                       }`}
                     >
                       10. Audit & ICP
@@ -1197,7 +1298,8 @@ export const CompanyResearchView: React.FC<CompanyResearchViewProps> = ({
                   <button
                     onClick={() => handleInvestigate(activeLead.id)}
                     disabled={isInvestigating}
-                    className="px-4 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-500 rounded-xl shadow-xs inline-flex items-center gap-1.5 transition-colors disabled:opacity-50"
+                    className="px-4 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-500 rounded-xl shadow-xs inline-flex items-center gap-1.5 transition-colors disabled:opacity-50 cursor-pointer"
+                    title="Start Company Investigation: Crawl website pages, extract core business facts, and compute the initial 100-point ICP fit score."
                   >
                     {isInvestigating ? (
                       <>
@@ -1236,7 +1338,11 @@ export const CompanyResearchView: React.FC<CompanyResearchViewProps> = ({
                 </h3>
                 <p className="text-xs text-slate-500">Edit scoring weights and qualification thresholds.</p>
               </div>
-              <button onClick={() => setIsICPModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+              <button 
+                onClick={() => setIsICPModalOpen(false)} 
+                className="text-slate-400 hover:text-slate-600 cursor-pointer"
+                title="Close: Dismiss the ICP configuration modal."
+              >
                 <XCircle className="w-5 h-5" />
               </button>
             </div>
@@ -1347,7 +1453,8 @@ export const CompanyResearchView: React.FC<CompanyResearchViewProps> = ({
               <button
                 type="button"
                 onClick={() => setIsICPModalOpen(false)}
-                className="px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-100 rounded-lg font-medium"
+                className="px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-100 rounded-lg font-medium cursor-pointer"
+                title="Cancel: Exit without saving changes to ICP configuration."
               >
                 Cancel
               </button>
@@ -1363,7 +1470,8 @@ export const CompanyResearchView: React.FC<CompanyResearchViewProps> = ({
                     alert('Error saving ICP config: ' + e.message);
                   }
                 }}
-                className="px-4 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-500 rounded-lg shadow-xs"
+                className="px-4 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-500 rounded-lg shadow-xs cursor-pointer"
+                title="Save ICP Configuration: Updates Ideal Customer Profile weights and qualification thresholds across the platform."
               >
                 Save ICP Configuration
               </button>

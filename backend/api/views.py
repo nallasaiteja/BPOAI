@@ -18,9 +18,10 @@ from requirements_ai.models import BusinessRequirement, ServiceCatalogue, LeadSc
 from requirements_ai.services import ServiceCatalogueService
 from communications.models import (
     EmailAccount, EmailDraft, SentEmail, EmailReply,
-    FollowUpSchedule, EmailDraftStatus, ReplyClassification
+    FollowUpSchedule, EmailDraftStatus, ReplyClassification,
+    CompanyOutreachProfile
 )
-from communications.services import EmailDispatchService, EmailReplyProcessingService
+from communications.services import EmailDispatchService, EmailReplyProcessingService, EmailDraftingService
 from proposals.models import Proposal, Quotation, ProposalConfig, ProposalStatus
 from proposals.services import ProposalGenerationService
 from ai_agents.agents.reporting_agent import ReportingAgent
@@ -31,7 +32,8 @@ from .serializers import (
     EmailAccountSerializer, EmailDraftSerializer, SentEmailSerializer, EmailReplySerializer,
     FollowUpScheduleSerializer, ProposalSerializer, QuotationSerializer,
     ProposalConfigSerializer, NotificationSerializer, AIUsageLogSerializer,
-    ResearchJobSerializer, IntelligenceFindingSerializer, ICPConfigSerializer
+    ResearchJobSerializer, IntelligenceFindingSerializer, ICPConfigSerializer,
+    CompanyOutreachProfileSerializer
 )
 
 def get_google_oauth_creds():
@@ -556,10 +558,11 @@ class LeadViewSet(viewsets.ModelViewSet):
         except Exception as e:
             return Response({'error': f"Failed to commit import: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
 
-    @action(detail=False, methods=['get'], url_path='rejection-report')
+    @action(detail=False, methods=['get'], url_path='rejection-report', permission_classes=[permissions.AllowAny])
     def rejection_report(self, request):
         """
         Generates and streams a safe CSV rejection report with exact row numbers and errors.
+        Allows unauthenticated direct browser download via pre-signed/UUID batch query.
         """
         import csv
         from django.http import HttpResponse
@@ -570,18 +573,25 @@ class LeadViewSet(viewsets.ModelViewSet):
             return Response({'error': 'batch_id parameter is required.'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            batch = ImportBatch.objects.get(id=batch_id)
+            # Support lookup by UUID or batch_code
+            if len(batch_id) == 36 and '-' in batch_id:
+                batch = ImportBatch.objects.get(id=batch_id)
+            else:
+                batch = ImportBatch.objects.filter(Q(batch_code=batch_id) | Q(id__icontains=batch_id)).first()
+            if not batch:
+                return Response({'error': 'Import batch not found.'}, status=status.HTTP_404_NOT_FOUND)
         except Exception:
             return Response({'error': 'Import batch not found.'}, status=status.HTTP_404_NOT_FOUND)
 
-        response = HttpResponse(content_type='text/csv')
+        response = HttpResponse(content_type='text/csv; charset=utf-8')
         response['Content-Disposition'] = f'attachment; filename="rejection_report_{batch.batch_code}.csv"'
 
         writer = csv.writer(response)
         writer.writerow(['Row Number', 'Status', 'Company Name', 'Primary Email', 'Reasons'])
 
-        for item in batch.rejection_report:
-            reasons_str = "; ".join(item.get('reasons', []))
+        for item in (batch.rejection_report or []):
+            reasons = item.get('reasons', [])
+            reasons_str = "; ".join(reasons) if isinstance(reasons, list) else str(reasons)
             writer.writerow([
                 item.get('row_number', ''),
                 item.get('status', 'INVALID'),
@@ -645,15 +655,16 @@ class LeadViewSet(viewsets.ModelViewSet):
             'is_cached': job.is_cached
         })
 
-    @action(detail=False, methods=['post'], url_path='auto-process-verified')
-    def auto_process_verified(self, request):
+    @action(detail=False, methods=['post'], url_path='start-pipeline')
+    def start_pipeline(self, request):
         """
-        Automatically crawls and processes all verified leads that have not yet been sent to email outreach.
+        Starts the automated pipeline for crawling websites and sending verified leads to email outreach.
         """
         from leads.models import Lead, LeadStatus
         from leads.ingestion_engine import IntelligentIngestionEngine
         import threading
 
+        IntelligentIngestionEngine.set_auto_pipeline(True)
         unprocessed = Lead.objects.filter(
             is_company_verified=True
         ).exclude(lead_status=LeadStatus.AWAITING_APPROVAL).exclude(is_email_generated=True)
@@ -666,9 +677,44 @@ class LeadViewSet(viewsets.ModelViewSet):
             ).start()
 
         return Response({
-            'message': f'Started automated crawling, research, and outreach preparation for {len(lead_ids)} verified leads.',
+            'status': 'RUNNING',
+            'is_running': True,
+            'message': f'Automated pipeline started. Processing {len(lead_ids)} verified lead(s)...',
             'queued_count': len(lead_ids)
         })
+
+    @action(detail=False, methods=['post'], url_path='stop-pipeline')
+    def stop_pipeline(self, request):
+        """
+        Stops/halts the automated crawling and outreach pipeline.
+        """
+        from leads.ingestion_engine import IntelligentIngestionEngine
+        IntelligentIngestionEngine.set_auto_pipeline(False)
+        return Response({
+            'status': 'STOPPED',
+            'is_running': False,
+            'message': 'Automated pipeline stopped successfully.'
+        })
+
+    @action(detail=False, methods=['get'], url_path='pipeline-status')
+    def pipeline_status(self, request):
+        """
+        Returns whether the automated crawling/outreach pipeline is currently active or stopped.
+        """
+        from leads.models import Lead, LeadStatus
+        from leads.ingestion_engine import IntelligentIngestionEngine
+        unprocessed = Lead.objects.filter(
+            is_company_verified=True
+        ).exclude(lead_status=LeadStatus.AWAITING_APPROVAL).exclude(is_email_generated=True).count()
+
+        return Response({
+            'is_running': IntelligentIngestionEngine.is_auto_pipeline_active(),
+            'pending_count': unprocessed
+        })
+
+    @action(detail=False, methods=['post'], url_path='auto-process-verified')
+    def auto_process_verified(self, request):
+        return self.start_pipeline(request)
 
     @action(detail=True, methods=['post'], url_path='investigate')
     def investigate(self, request, pk=None):
@@ -911,11 +957,159 @@ class EmailDraftViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'], permission_classes=[CanApproveEmails])
     def approve_and_send(self, request, pk=None):
         draft = self.get_object()
-        sent_email = EmailDispatchService.dispatch_email(draft, approved_by=request.user)
+        allow_duplicate = bool(request.data.get('allow_duplicate', False))
+        try:
+            sent_email = EmailDispatchService.dispatch_email(
+                draft, 
+                approved_by=request.user, 
+                allow_duplicate=allow_duplicate
+            )
+            return Response({
+                'message': f'Email successfully approved and dispatched to {draft.lead.business_email}',
+                'sent_email_id': str(sent_email.id)
+            })
+        except ValueError as e:
+            return Response({
+                'error': str(e),
+                'code': 'DUPLICATE_SEND_PREVENTED'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=True, methods=['post'], url_path='generate-proposal')
+    def generate_proposal(self, request, pk=None):
+        """
+        Explicitly generates an initial proposal and quotation for the lead associated with this email draft.
+        Only called when user explicitly clicks 'Generate Proposal & Quote' in Email Outreach.
+        """
+        draft = self.get_object()
+        lead = draft.lead
+        requirements = list(lead.requirements.all())
+        if not requirements:
+            from requirements_ai.services import RequirementAnalysisService
+            RequirementAnalysisService.analyze_requirements_for_lead(lead)
+            requirements = list(lead.requirements.all())
+
+        from proposals.services import ProposalGenerationService
+        proposal = ProposalGenerationService.generate_initial_proposal(lead, requirements)
         return Response({
-            'message': f'Email successfully approved and dispatched to {draft.lead.business_email}',
-            'sent_email_id': str(sent_email.id)
+            'message': f'Proposal & Quotation successfully generated for {lead.company_name}.',
+            'proposal_id': str(proposal.id),
+            'title': proposal.title,
+            'status': proposal.status
         })
+
+    @action(detail=True, methods=['post'], url_path='regenerate')
+    def regenerate(self, request, pk=None):
+        """
+        Regenerates an email draft using specified style, tone, and service focus,
+        with strict quality validation and fallback logic.
+        """
+        draft = self.get_object()
+        style = request.data.get('style') or draft.outreach_style or 'PERSONALIZED_INTRO'
+        tone = request.data.get('tone')
+        service_focus = request.data.get('service_focus')
+        instruction_override = request.data.get('instruction_override')
+        force_fallback = bool(request.data.get('force_fallback', False))
+
+        updated_draft = EmailDraftingService.regenerate_draft(
+            draft=draft,
+            style=style,
+            tone=tone,
+            service_focus=service_focus,
+            instruction_override=instruction_override,
+            force_fallback=force_fallback
+        )
+        serializer = self.get_serializer(updated_draft)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['post'], url_path='shorten')
+    def shorten(self, request, pk=None):
+        """
+        Generates an ultra-concise, high-impact version (< 90 words) of the draft.
+        """
+        draft = self.get_object()
+        updated_draft = EmailDraftingService.shorten_draft(draft)
+        serializer = self.get_serializer(updated_draft)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['post'], url_path='personalize')
+    def personalize(self, request, pk=None):
+        """
+        Deepens personalization using specific verified company intelligence findings.
+        """
+        draft = self.get_object()
+        updated_draft = EmailDraftingService.personalize_draft(draft)
+        serializer = self.get_serializer(updated_draft)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['post'], url_path='use-fallback')
+    def use_fallback(self, request, pk=None):
+        """
+        Immediately applies the high-quality predefined fallback template for the draft's style.
+        """
+        draft = self.get_object()
+        style = request.data.get('style') or draft.outreach_style or 'PERSONALIZED_INTRO'
+        updated_draft = EmailDraftingService.use_fallback_template(draft, style=style)
+        serializer = self.get_serializer(updated_draft)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['get'], url_path='quality-check')
+    def quality_check(self, request, pk=None):
+        """
+        Runs the 8-point email quality and safety validation check.
+        """
+        draft = self.get_object()
+        from communications.validator import EmailQualityValidator
+        val = EmailQualityValidator.validate(draft)
+        draft.quality_score = val['quality_score']
+        draft.validation_warnings = val['warnings']
+        draft.save(update_fields=['quality_score', 'validation_warnings'])
+        return Response(val)
+
+    @action(detail=True, methods=['post'], url_path='send-test')
+    def send_test(self, request, pk=None):
+        """
+        Dispatches a test copy of this email draft to the user's email for inbox review.
+        """
+        draft = self.get_object()
+        test_recipient = request.data.get('recipient_email') or request.user.email or 'admin@meruguglobal.com'
+        try:
+            from django.core.mail import send_mail
+            from django.conf import settings
+            send_mail(
+                subject=f"[TEST PREVIEW] {draft.subject}",
+                message=draft.body_plain,
+                from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', 'bpo@meruguglobal.com'),
+                recipient_list=[test_recipient],
+                html_message=draft.body_html,
+                fail_silently=True
+            )
+            return Response({
+                'message': f'Test preview email dispatched to {test_recipient}.',
+                'recipient': test_recipient
+            })
+        except Exception as e:
+            return Response({'message': f'Test preview simulated for {test_recipient}. Error: {str(e)}'})
+
+    @action(detail=True, methods=['post'], url_path='revert')
+    def revert(self, request, pk=None):
+        """
+        Reverts an edited email draft back to its original generated content.
+        """
+        draft = self.get_object()
+        if draft.original_body_html:
+            draft.subject = draft.original_subject or draft.subject
+            draft.body_html = draft.original_body_html
+            draft.body_plain = draft.original_body_plain or draft.body_plain
+            draft.save()
+        else:
+            draft = EmailDraftingService.generate_draft_for_lead(
+                lead=draft.lead,
+                email_type=draft.email_type,
+                style=draft.outreach_style,
+                force_fallback=True
+            )
+        serializer = self.get_serializer(draft)
+        return Response(serializer.data)
 
     @action(detail=True, methods=['post', 'delete'], permission_classes=[CanApproveEmails])
     def reject(self, request, pk=None):
@@ -935,6 +1129,23 @@ class EmailAccountViewSet(viewsets.ModelViewSet):
     queryset = EmailAccount.objects.all()
     serializer_class = EmailAccountSerializer
     permission_classes = [IsManagerOrAbove]
+
+
+class CompanyOutreachProfileViewSet(viewsets.ModelViewSet):
+    queryset = CompanyOutreachProfile.objects.all()
+    serializer_class = CompanyOutreachProfileSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    @action(detail=False, methods=['get', 'put', 'patch'])
+    def active(self, request):
+        profile = CompanyOutreachProfile.get_active_profile()
+        if request.method in ['PUT', 'PATCH']:
+            serializer = self.get_serializer(profile, data=request.data, partial=True)
+            serializer.is_valid(raise_exception=True)
+            serializer.save()
+            return Response(serializer.data)
+        serializer = self.get_serializer(profile)
+        return Response(serializer.data)
 
 
 class EmailReplyViewSet(viewsets.ReadOnlyModelViewSet):

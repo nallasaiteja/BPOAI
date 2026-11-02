@@ -16,6 +16,7 @@ export const App: React.FC = () => {
   const [currentTab, setCurrentTab] = useState<string>('landing');
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState<boolean>(false);
 
   // Core Data States - Initialized clean with 0 fake/demo records
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -407,6 +408,8 @@ export const App: React.FC = () => {
         setCurrentTab={setCurrentTab}
         approvalCount={kpis.emails_awaiting_approval}
         onLogout={handleLogout}
+        isOpenMobile={isMobileSidebarOpen}
+        onCloseMobile={() => setIsMobileSidebarOpen(false)}
       />
 
       {/* Main View Area */}
@@ -415,9 +418,10 @@ export const App: React.FC = () => {
           onRefresh={loadData}
           isRefreshing={isRefreshing}
           onLogout={handleLogout}
+          onToggleMobileSidebar={() => setIsMobileSidebarOpen(prev => !prev)}
         />
 
-        <main className="flex-1 overflow-y-auto p-6 md:p-8">
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
           {currentTab === 'dashboard' && (
             <DashboardView
               kpis={kpis}
@@ -456,10 +460,14 @@ export const App: React.FC = () => {
           {currentTab === 'approvals' && (
             <EmailApprovalView
               drafts={emailDrafts}
+              proposals={proposals}
               onApprove={handleApproveEmail}
               onReject={handleRejectEmail}
               onDeleteLead={handleDeleteLead}
               onDeleteAll={handleDeleteAllLeads}
+              onNavigate={setCurrentTab}
+              showToast={showToast}
+              onRefresh={loadData}
             />
           )}
 

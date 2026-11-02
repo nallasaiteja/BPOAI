@@ -77,7 +77,19 @@ class LLMGateway:
                 return {"text": raw_content}
 
             except Exception as e:
-                logger.error(f"Gemini API call failed for {agent_name}: {e}. Falling back to rule-based engine.")
+                e_str = str(e)
+                if "ResourceExhausted" in e_str or "429" in e_str:
+                    reason = "Gemini API Quota Exceeded (HTTP 429: ResourceExhausted). Daily or per-minute quota has been reached."
+                elif "Deadline" in e_str or "timed out" in e_str.lower():
+                    reason = "Gemini Request Timed Out (Deadline exceeded). Google AI server took too long to respond."
+                elif "11001" in e_str or "getaddrinfo" in e_str.lower() or "connection" in e_str.lower():
+                    reason = "Network Connection Error: Server could not reach Google Gemini API (offline or DNS error)."
+                elif "API_KEY_INVALID" in e_str or "400" in e_str or "invalid api key" in e_str.lower():
+                    reason = "Invalid Gemini API Key: The API key in .env was rejected by Google."
+                else:
+                    reason = f"Gemini API Error: {e_str[:120]}"
+
+                logger.error(f"Gemini API call failed for {agent_name}: {reason}. Falling back to rule-based engine.")
                 AIUsageLog.objects.create(
                     agent_name=agent_name,
                     provider='gemini',
@@ -85,15 +97,19 @@ class LLMGateway:
                     cost_usd=0,
                     execution_time_ms=int((time.time() - start_time) * 1000),
                     success=False,
-                    error_message=str(e)
+                    error_message=reason
                 )
+                return cls._generate_deterministic_fallback(agent_name, user_prompt, reason=reason)
+        else:
+            reason = "Gemini API key is not configured or missing in backend/.env"
+            return cls._generate_deterministic_fallback(agent_name, user_prompt, reason=reason)
 
         # Fallback deterministic reasoning when Gemini API key is missing or offline
-        return cls._generate_deterministic_fallback(agent_name, user_prompt)
+        return cls._generate_deterministic_fallback(agent_name, user_prompt, reason="Deterministic fallback triggered")
 
     @classmethod
-    def _generate_deterministic_fallback(cls, agent_name: str, user_prompt: str) -> Dict[str, Any]:
+    def _generate_deterministic_fallback(cls, agent_name: str, user_prompt: str, reason: str = "Deterministic fallback triggered") -> Dict[str, Any]:
         """
         Guarantees that the BPO pipeline executes reliably even in sandbox or offline environments.
         """
-        return {"status": "fallback_triggered", "agent": agent_name}
+        return {"status": "fallback_triggered", "agent": agent_name, "reason": reason, "fallback_reason": reason}

@@ -261,10 +261,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onUserSwitched, onDe
       )}
 
       {/* Google Workspace / Gmail OAuth Card */}
-      <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
-        <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
+      <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-6 shadow-sm">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 border-b border-slate-100 pb-3">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600 border border-blue-100">
+            <div className="w-9 h-9 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600 border border-blue-100 shrink-0">
               <Mail className="w-5 h-5" />
             </div>
             <div>
@@ -287,14 +287,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onUserSwitched, onDe
         </div>
 
         {googleStatus.connected ? (
-          <div className="flex items-center justify-between bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50 p-4 rounded-xl border border-slate-200">
             <div>
               <p className="text-xs font-semibold text-slate-800">Connected Account: <span className="font-bold text-blue-600">{googleStatus.email}</span></p>
               <p className="text-[11px] text-slate-500 mt-0.5">Approved outreach emails in the approval queue will be dispatched directly through this Gmail account.</p>
             </div>
             <button
               onClick={handleDisconnectGoogle}
-              className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-colors cursor-pointer shrink-0"
             >
               <LogOut className="w-3.5 h-3.5" />
               <span>Disconnect</span>
@@ -313,7 +313,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onUserSwitched, onDe
               </div>
             )}
 
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               <button
                 onClick={handleConnectGoogle}
                 className="flex items-center gap-2.5 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg shadow-sm transition-all cursor-pointer"
@@ -336,10 +336,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onUserSwitched, onDe
       </div>
 
       {/* Google Gemini AI Engine Card */}
-      <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
-        <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
+      <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-6 shadow-sm">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 border-b border-slate-100 pb-3">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600 border border-indigo-100">
+            <div className="w-9 h-9 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600 border border-indigo-100 shrink-0">
               <Sparkles className="w-5 h-5" />
             </div>
             <div>
@@ -425,8 +425,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onUserSwitched, onDe
       </div>
 
       {/* Enterprise RBAC User Directory & 1-Click Role Switcher */}
-      <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
-        <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
+      <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-6 shadow-sm">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 border-b border-slate-100 pb-3">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600 border border-indigo-100">
               <Users className="w-5 h-5" />

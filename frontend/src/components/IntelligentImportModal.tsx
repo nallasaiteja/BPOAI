@@ -18,7 +18,7 @@ interface IntelligentImportModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => Promise<void>;
-  showToast: (msg: string) => void;
+  showToast?: (msg: string) => void;
 }
 
 type WizardStep = 'upload' | 'sheets_and_headers' | 'mapping' | 'preview' | 'complete';
@@ -53,6 +53,7 @@ export const IntelligentImportModal: React.FC<IntelligentImportModalProps> = ({
   const [previewData, setPreviewData] = useState<MappingPreviewResult | null>(null);
   const [commitResult, setCommitResult] = useState<CommitImportResult | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [isDownloadingReport, setIsDownloadingReport] = useState(false);
 
   // Load templates on open
   useEffect(() => {
@@ -174,7 +175,7 @@ export const IntelligentImportModal: React.FC<IntelligentImportModalProps> = ({
       }
     });
     setMappings(newMappings);
-    showToast(`Applied mapping template: ${tmpl.name}`);
+    if (showToast) showToast(`Applied mapping template: ${tmpl.name}`);
   };
 
   // Validation Warnings
@@ -234,6 +235,29 @@ export const IntelligentImportModal: React.FC<IntelligentImportModalProps> = ({
       setErrorMsg(err?.message || err?.error || 'Failed to commit import.');
     } finally {
       setIsCommitting(false);
+    }
+  };
+
+  const handleDownloadRejectionReport = async () => {
+    if (!commitResult?.batch_id) return;
+    setIsDownloadingReport(true);
+    try {
+      const blob = await api.downloadRejectionReport(commitResult.batch_id);
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `rejection_report_${commitResult.batch_number || 'audit'}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err: any) {
+      console.error('Failed to download rejection report via API:', err);
+      // Fallback direct link
+      const fallbackUrl = commitResult.rejection_report_url || `/api/v1/leads/rejection-report/?batch_id=${commitResult.batch_id}`;
+      window.open(fallbackUrl, '_blank');
+    } finally {
+      setIsDownloadingReport(false);
     }
   };
 
@@ -962,16 +986,17 @@ export const IntelligentImportModal: React.FC<IntelligentImportModalProps> = ({
               </div>
 
               {/* Download Rejection Report if any rejected */}
-              {commitResult.has_rejections && commitResult.rejection_report_url && (
+              {commitResult.has_rejections && (
                 <div className="pt-2">
-                  <a
-                    href={commitResult.rejection_report_url}
-                    download
-                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold border border-slate-300 transition-colors"
+                  <button
+                    type="button"
+                    onClick={handleDownloadRejectionReport}
+                    disabled={isDownloadingReport}
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold border border-slate-300 transition-colors cursor-pointer disabled:opacity-50"
                   >
-                    <Download className="w-4 h-4 text-slate-600" />
-                    Download Skipped Records Audit Report (.csv)
-                  </a>
+                    <Download className={`w-4 h-4 text-slate-600 ${isDownloadingReport ? 'animate-bounce' : ''}`} />
+                    {isDownloadingReport ? 'Generating Audit CSV...' : 'Download Skipped Records Audit Report (.csv)'}
+                  </button>
                 </div>
               )}
 

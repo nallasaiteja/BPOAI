@@ -6,7 +6,10 @@ from research.models import (
     ResearchSource, ResearchJob, IntelligenceFinding, ICPConfig
 )
 from requirements_ai.models import BusinessRequirement, ServiceCatalogue, LeadScore
-from communications.models import EmailAccount, EmailDraft, SentEmail, EmailReply, FollowUpSchedule
+from communications.models import (
+    EmailAccount, EmailDraft, SentEmail, EmailReply, FollowUpSchedule,
+    CompanyOutreachProfile
+)
 from proposals.models import Proposal, Quotation, QuotationLineItem, ProposalConfig
 
 class UserSerializer(serializers.ModelSerializer):
@@ -155,6 +158,16 @@ class EmailAccountSerializer(serializers.ModelSerializer):
     class Meta:
         model = EmailAccount
         exclude = ['smtp_password', 'oauth_credentials']
+
+class CompanyOutreachProfileSerializer(serializers.ModelSerializer):
+    missing_warnings = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CompanyOutreachProfile
+        fields = '__all__'
+
+    def get_missing_warnings(self, obj):
+        return obj.get_missing_fields_warning()
 
 class EmailDraftSerializer(serializers.ModelSerializer):
     lead_name = serializers.CharField(source='lead.company_name', read_only=True)

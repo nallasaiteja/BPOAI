@@ -6,11 +6,15 @@ from email.mime.application import MIMEApplication
 from typing import Dict, Any, Optional
 from django.utils import timezone
 from django.core.mail import send_mail
+from django.db.models import Q
 from leads.models import Lead, LeadStatus
 from .models import (
     EmailAccount, EmailDraft, SentEmail, EmailReply,
-    FollowUpSchedule, EmailDraftStatus, EmailType, EmailProviderType, ReplyClassification
+    FollowUpSchedule, EmailDraftStatus, EmailType, EmailProviderType, ReplyClassification,
+    CompanyOutreachProfile, GenerationMethod
 )
+from .template_engine import FallbackTemplateEngine
+from .validator import EmailQualityValidator
 from ai_agents.agents.email_generation_agent import EmailGenerationAgent
 from ai_agents.agents.email_response_analysis_agent import EmailResponseAnalysisAgent
 
@@ -19,29 +23,70 @@ logger = logging.getLogger(__name__)
 
 class EmailDraftingService:
     @classmethod
-    def generate_draft_for_lead(cls, lead: Lead, email_type: str = EmailType.COMPANY_INTRO) -> EmailDraft:
+    def generate_draft_for_lead(
+        cls, 
+        lead: Lead, 
+        email_type: str = EmailType.COMPANY_INTRO,
+        style: Optional[str] = None,
+        tone: Optional[str] = None,
+        service_focus: Optional[str] = None,
+        force_fallback: bool = False,
+        instruction_override: Optional[str] = None
+    ) -> EmailDraft:
         report = getattr(lead, 'research_report', None)
-        requirements = list(lead.requirements.all())
+        requirements = list(lead.requirements.all()) if hasattr(lead, 'requirements') else []
 
-        # Select sender account
         sender_account = EmailAccount.objects.filter(is_active=True).first()
+        outreach_style = style or email_type or 'PERSONALIZED_INTRO'
 
-        # Invoke Email Generation Agent (Agent 8)
-        agent8 = EmailGenerationAgent()
-        draft_content = agent8.generate(
-            lead=lead,
-            report=report,
-            requirements=requirements,
-            email_type=email_type
-        )
+        if force_fallback:
+            profile = CompanyOutreachProfile.get_active_profile()
+            draft_content = FallbackTemplateEngine.render_fallback(
+                lead=lead,
+                style=outreach_style,
+                service_focus=service_focus,
+                profile=profile
+            )
+            draft_content['fallback_reason'] = 'Explicit user selection: Predefined Fallback Template'
+            val = EmailQualityValidator.validate({
+                'subject': draft_content['subject'],
+                'body_plain': draft_content['body_plain'],
+                'body_html': draft_content['body_html'],
+                'recipient_email': lead.business_email
+            })
+            draft_content['quality_score'] = val['quality_score']
+            draft_content['validation_warnings'] = val['warnings']
+        else:
+            agent8 = EmailGenerationAgent()
+            draft_content = agent8.generate(
+                lead=lead,
+                report=report,
+                requirements=requirements,
+                email_type=email_type,
+                style=outreach_style,
+                tone=tone,
+                service_focus=service_focus,
+                instruction_override=instruction_override
+            )
 
         # Deduplicate: Update existing draft for this lead or create a new one
-        existing_draft = EmailDraft.objects.filter(lead=lead, email_type=email_type).first()
+        existing_draft = EmailDraft.objects.filter(lead=lead).first()
         if existing_draft:
             existing_draft.subject = draft_content['subject']
             existing_draft.body_html = draft_content['body_html']
             existing_draft.body_plain = draft_content['body_plain']
+            existing_draft.original_subject = draft_content['subject']
+            existing_draft.original_body_html = draft_content['body_html']
+            existing_draft.original_body_plain = draft_content['body_plain']
             existing_draft.confidence_score = draft_content.get('confidence_score', 92)
+            existing_draft.email_type = email_type
+            existing_draft.outreach_style = outreach_style
+            existing_draft.generation_method = draft_content.get('generation_method', GenerationMethod.AI_GENERATED)
+            existing_draft.fallback_reason = draft_content.get('fallback_reason')
+            existing_draft.ai_model_used = draft_content.get('ai_model_used', 'gemini-2.5-flash')
+            existing_draft.personalization_sources = draft_content.get('personalization_sources', [])
+            existing_draft.validation_warnings = draft_content.get('validation_warnings', [])
+            existing_draft.quality_score = draft_content.get('quality_score', 95)
             existing_draft.status = EmailDraftStatus.AWAITING_APPROVAL
             if sender_account:
                 existing_draft.sender_account = sender_account
@@ -52,22 +97,67 @@ class EmailDraftingService:
                 lead=lead,
                 sender_account=sender_account,
                 email_type=email_type,
+                outreach_style=outreach_style,
                 subject=draft_content['subject'],
                 body_html=draft_content['body_html'],
                 body_plain=draft_content['body_plain'],
+                original_subject=draft_content['subject'],
+                original_body_html=draft_content['body_html'],
+                original_body_plain=draft_content['body_plain'],
                 status=EmailDraftStatus.AWAITING_APPROVAL,
-                confidence_score=draft_content.get('confidence_score', 92)
+                confidence_score=draft_content.get('confidence_score', 92),
+                generation_method=draft_content.get('generation_method', GenerationMethod.AI_GENERATED),
+                fallback_reason=draft_content.get('fallback_reason'),
+                ai_model_used=draft_content.get('ai_model_used', 'gemini-2.5-flash'),
+                personalization_sources=draft_content.get('personalization_sources', []),
+                validation_warnings=draft_content.get('validation_warnings', []),
+                quality_score=draft_content.get('quality_score', 95)
             )
 
         lead.is_email_generated = True
         lead.lead_status = LeadStatus.AWAITING_APPROVAL
         lead.save()
 
-        # Also trigger proposal creation if high value
-        from proposals.services import ProposalGenerationService
-        ProposalGenerationService.generate_initial_proposal(lead, requirements)
-
         return draft
+
+    @classmethod
+    def regenerate_draft(
+        cls, 
+        draft: EmailDraft, 
+        style: Optional[str] = None, 
+        tone: Optional[str] = None, 
+        service_focus: Optional[str] = None,
+        instruction_override: Optional[str] = None,
+        force_fallback: bool = False
+    ) -> EmailDraft:
+        return cls.generate_draft_for_lead(
+            lead=draft.lead,
+            email_type=draft.email_type,
+            style=style or draft.outreach_style,
+            tone=tone,
+            service_focus=service_focus,
+            force_fallback=force_fallback,
+            instruction_override=instruction_override
+        )
+
+    @classmethod
+    def shorten_draft(cls, draft: EmailDraft) -> EmailDraft:
+        instruction = "Shorten this outreach message significantly. Make it ultra-concise, direct, and under 90 words while preserving the core value proposition and call to action."
+        return cls.regenerate_draft(draft, instruction_override=instruction)
+
+    @classmethod
+    def personalize_draft(cls, draft: EmailDraft) -> EmailDraft:
+        instruction = "Deepen the personalization using specific observable intelligence findings (such as detected technologies, company industry context, or operational requirements)."
+        return cls.regenerate_draft(draft, instruction_override=instruction)
+
+    @classmethod
+    def use_fallback_template(cls, draft: EmailDraft, style: Optional[str] = None) -> EmailDraft:
+        return cls.generate_draft_for_lead(
+            lead=draft.lead,
+            email_type=draft.email_type,
+            style=style or draft.outreach_style,
+            force_fallback=True
+        )
 
 
 class EmailDispatchService:
@@ -77,8 +167,21 @@ class EmailDispatchService:
     """
 
     @classmethod
-    def dispatch_email(cls, draft: EmailDraft, approved_by=None) -> SentEmail:
+    def dispatch_email(cls, draft: EmailDraft, approved_by=None, allow_duplicate: bool = False) -> SentEmail:
         lead = draft.lead
+        recipient_email = getattr(lead, 'business_email', '') or getattr(lead, 'contact_email', '')
+
+        # Scenario 12: An email cannot be sent twice to the same recipient without an explicit override
+        if not allow_duplicate and recipient_email:
+            existing_send = SentEmail.objects.filter(
+                Q(recipient_email__iexact=recipient_email) | Q(lead=lead)
+            ).first()
+            if existing_send:
+                raise ValueError(
+                    f"Duplicate email send prevented: An outreach email has already been sent to {recipient_email} "
+                    f"on {existing_send.sent_at.strftime('%Y-%m-%d %H:%M')}. Set allow_duplicate=True to override."
+                )
+
         # Check for active Google Workspace / Gmail OAuth account first
         gmail_oauth_account = EmailAccount.objects.filter(provider=EmailProviderType.GMAIL, is_active=True).first()
         account = gmail_oauth_account or draft.sender_account or EmailAccount.objects.filter(is_active=True).first()

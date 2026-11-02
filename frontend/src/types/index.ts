@@ -366,12 +366,53 @@ export interface EmailDraft {
   lead_name: string;
   lead_email: string;
   email_type: string;
+  outreach_style?: string;
   subject: string;
   body_html: string;
   body_plain: string;
   status: 'DRAFT' | 'AWAITING_APPROVAL' | 'APPROVED' | 'REJECTED' | 'SENT';
   confidence_score: number;
+  generation_method?: 'AI_GENERATED' | 'TEMPLATE_FALLBACK';
+  fallback_reason?: string;
+  ai_model_used?: string;
+  personalization_sources?: string[];
+  validation_warnings?: string[];
+  quality_score?: number;
   generated_at: string;
+  updated_at?: string;
+}
+
+export interface CompanyProfile {
+  id: string;
+  company_name: string;
+  brand_name: string;
+  website: string;
+  business_introduction: string;
+  services_offered: string[];
+  target_industries: string[];
+  ideal_customer_profile: string;
+  key_differentiators: string[];
+  case_studies: Array<{ title: string; result: string; url?: string }>;
+  testimonials: Array<{ author: string; company: string; quote: string }>;
+  contact_email: string;
+  contact_phone: string;
+  business_address: string;
+  sender_name: string;
+  sender_designation: string;
+  preferred_tone: string;
+  desired_cta: string;
+  is_active: boolean;
+  missing_warnings?: string[];
+  updated_at?: string;
+}
+
+export interface EmailQualityCheckResult {
+  is_valid: boolean;
+  quality_score: number;
+  checks_passed: number;
+  total_checks: number;
+  word_count: number;
+  warnings: string[];
 }
 
 export interface Proposal {

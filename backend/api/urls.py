@@ -6,7 +6,8 @@ from .views import (
     EmailAccountViewSet, EmailReplyViewSet, FollowUpScheduleViewSet,
     ProposalViewSet, ProposalConfigViewSet, dashboard_analytics_view,
     LeadMappingTemplateViewSet, ImportBatchViewSet,
-    ICPConfigViewSet, ResearchReportViewSet, ResearchJobViewSet
+    ICPConfigViewSet, ResearchReportViewSet, ResearchJobViewSet,
+    CompanyOutreachProfileViewSet
 )
 
 router = DefaultRouter()
@@ -18,6 +19,7 @@ router.register(r'services', ServiceCatalogueViewSet, basename='services')
 router.register(r'requirements', BusinessRequirementViewSet, basename='requirements')
 router.register(r'email-drafts', EmailDraftViewSet, basename='email-drafts')
 router.register(r'email-accounts', EmailAccountViewSet, basename='email-accounts')
+router.register(r'company-profile', CompanyOutreachProfileViewSet, basename='company-profile')
 router.register(r'replies', EmailReplyViewSet, basename='replies')
 router.register(r'followups', FollowUpScheduleViewSet, basename='followups')
 router.register(r'proposals', ProposalViewSet, basename='proposals')

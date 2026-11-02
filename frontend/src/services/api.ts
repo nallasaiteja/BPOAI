@@ -2,7 +2,8 @@ import {
   Lead, ServiceCatalogue, BusinessRequirement, 
   EmailDraft, Proposal, DashboardKPIs, ExecutiveInsights,
   FileInspectionResult, MappingPreviewResult, CommitImportResult,
-  LeadMappingTemplate, ImportBatch, ICPConfig, ResearchJob
+  LeadMappingTemplate, ImportBatch, ICPConfig, ResearchJob,
+  CompanyProfile, EmailQualityCheckResult
 } from '../types';
 
 const BASE_URL = (import.meta.env.VITE_API_BASE_URL || '/api/v1').replace(/\/+$/, '');
@@ -214,6 +215,22 @@ class ApiService {
     return `${BASE_URL}/leads/rejection-report/?batch_id=${batchId}`;
   }
 
+  async downloadRejectionReport(batchId: string): Promise<Blob> {
+    await this.ensureAuth().catch(() => null);
+    const headers: Record<string, string> = {};
+    if (this.token) {
+      headers['Authorization'] = `Token ${this.token}`;
+    }
+    const response = await fetch(`${BASE_URL}/leads/rejection-report/?batch_id=${encodeURIComponent(batchId)}`, {
+      method: 'GET',
+      headers
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to download report (${response.status} ${response.statusText})`);
+    }
+    return response.blob();
+  }
+
   async getMappingTemplates(): Promise<LeadMappingTemplate[]> {
     const res = await this.request<{ results: LeadMappingTemplate[] }>('/mapping-templates/');
     return res.results || (res as any);
@@ -263,8 +280,28 @@ class ApiService {
     });
   }
 
+  async startPipeline(): Promise<any> {
+    return this.request('/leads/start-pipeline/', {
+      method: 'POST',
+    });
+  }
+
+  async stopPipeline(): Promise<any> {
+    return this.request('/leads/stop-pipeline/', {
+      method: 'POST',
+    });
+  }
+
+  async getPipelineStatus(): Promise<{ is_running: boolean; pending_count: number }> {
+    return this.request('/leads/pipeline-status/');
+  }
+
   async autoProcessVerifiedLeads(): Promise<any> {
-    return this.request('/leads/auto-process-verified/', {
+    return this.startPipeline();
+  }
+
+  async generateProposalForDraft(draftId: string): Promise<any> {
+    return this.request(`/email-drafts/${draftId}/generate-proposal/`, {
       method: 'POST',
     });
   }
@@ -356,6 +393,71 @@ class ApiService {
     return this.request(`/email-drafts/${draftId}/reject/`, {
       method: 'POST',
       body: JSON.stringify({ notes }),
+    });
+  }
+
+  async saveDraft(draftId: string, data: Partial<EmailDraft>): Promise<EmailDraft> {
+    return this.request<EmailDraft>(`/email-drafts/${draftId}/`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async regenerateDraft(
+    draftId: string, 
+    params: { 
+      style?: string; 
+      tone?: string; 
+      service_focus?: string; 
+      instruction_override?: string; 
+      force_fallback?: boolean; 
+    }
+  ): Promise<EmailDraft> {
+    return this.request<EmailDraft>(`/email-drafts/${draftId}/regenerate/`, {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+  }
+
+  async shortenDraft(draftId: string): Promise<EmailDraft> {
+    return this.request<EmailDraft>(`/email-drafts/${draftId}/shorten/`, {
+      method: 'POST',
+    });
+  }
+
+  async personalizeDraft(draftId: string): Promise<EmailDraft> {
+    return this.request<EmailDraft>(`/email-drafts/${draftId}/personalize/`, {
+      method: 'POST',
+    });
+  }
+
+  async useFallbackTemplate(draftId: string, style?: string): Promise<EmailDraft> {
+    return this.request<EmailDraft>(`/email-drafts/${draftId}/use-fallback/`, {
+      method: 'POST',
+      body: JSON.stringify({ style }),
+    });
+  }
+
+  async checkDraftQuality(draftId: string): Promise<EmailQualityCheckResult> {
+    return this.request<EmailQualityCheckResult>(`/email-drafts/${draftId}/quality-check/`);
+  }
+
+  async sendTestEmail(draftId: string, recipientEmail?: string): Promise<any> {
+    return this.request(`/email-drafts/${draftId}/send-test/`, {
+      method: 'POST',
+      body: JSON.stringify({ recipient_email: recipientEmail }),
+    });
+  }
+
+  // Company Outreach Profile
+  async getCompanyProfile(): Promise<CompanyProfile> {
+    return this.request<CompanyProfile>('/company-profile/active/');
+  }
+
+  async updateCompanyProfile(data: Partial<CompanyProfile>): Promise<CompanyProfile> {
+    return this.request<CompanyProfile>('/company-profile/active/', {
+      method: 'PUT',
+      body: JSON.stringify(data),
     });
   }
 
