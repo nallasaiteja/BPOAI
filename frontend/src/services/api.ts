@@ -137,7 +137,8 @@ class ApiService {
 
   // Leads
   async getLeads(params: Record<string, any> = {}): Promise<{ results: Lead[]; count: number }> {
-    const qs = new URLSearchParams(params).toString();
+    const fullParams = { page_size: 1000, ...params };
+    const qs = new URLSearchParams(fullParams as any).toString();
     return this.request(`/leads/${qs ? `?${qs}` : ''}`);
   }
 

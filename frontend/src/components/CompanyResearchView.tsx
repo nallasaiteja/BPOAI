@@ -68,27 +68,33 @@ export const CompanyResearchView: React.FC<CompanyResearchViewProps> = ({
     }
   }, [leads, selectedLeadId]);
 
+  // Count verified leads pending automated crawling & outreach drafting
+  const verifiedPendingOutreach = leads.filter(
+    l => l.is_company_verified && l.lead_status !== 'AWAITING_APPROVAL' && !l.is_email_generated
+  ).length;
+
   // Auto-process any verified leads into the outreach queue automatically
   useEffect(() => {
-    const verifiedUnprocessed = leads.filter(
-      l => l.is_company_verified && l.lead_status !== 'AWAITING_APPROVAL' && !l.is_email_generated
-    );
-    if (verifiedUnprocessed.length > 0 && !isAutoProcessing) {
+    if (verifiedPendingOutreach > 0 && !isAutoProcessing) {
       api.autoProcessVerifiedLeads()
         .then(() => {
           // background processing spawned
         })
         .catch(() => null);
     }
-  }, [leads.length]);
+  }, [verifiedPendingOutreach]);
+
+  // Periodically refresh data while background processing is working through the verified queue
+  useEffect(() => {
+    if (verifiedPendingOutreach === 0 || !onRefresh) return;
+    const interval = setInterval(() => {
+      onRefresh();
+    }, 4000);
+    return () => clearInterval(interval);
+  }, [verifiedPendingOutreach, onRefresh]);
 
   const activeLead = leads.find(l => l.id === selectedLeadId);
   const report: ResearchReport | undefined = activeLead?.research_report;
-
-  // Count verified leads pending automated crawling & outreach drafting
-  const verifiedPendingOutreach = leads.filter(
-    l => l.is_company_verified && l.lead_status !== 'AWAITING_APPROVAL' && !l.is_email_generated
-  ).length;
 
   // Filtered Leads Directory
   const filteredLeads = leads.filter((lead) => {

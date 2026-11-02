@@ -835,7 +835,7 @@ class LeadViewSet(viewsets.ModelViewSet):
         # Trigger research pipeline, requirement analysis, and outreach draft automatically
         from research.services import CompanyResearchService
         from requirements_ai.services import RequirementAnalysisService
-        from email_engine.services import EmailDraftingService
+        from communications.services import EmailDraftingService
 
         report, _ = CompanyResearchService.initialize_and_run(lead_id=str(lead.id), force_refresh=True)
         try:
