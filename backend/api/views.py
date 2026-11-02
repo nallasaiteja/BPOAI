@@ -676,26 +676,59 @@ class LeadViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'], url_path='approve-report')
     def approve_report(self, request, pk=None):
         """
-        Approves the research findings and advances the lead to the qualified review queue.
+        Approves the research findings, generates tailored business requirements,
+        creates a personalized email draft, and sends the lead into the Email Outreach queue.
         """
         lead = self.get_object()
         report = getattr(lead, 'research_report', None)
         if not report:
-            return Response({'error': 'No research report found.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': 'No research report found. Please investigate the company first.'}, status=status.HTTP_400_BAD_REQUEST)
 
         report.human_review_status = 'APPROVED'
         report.reviewed_by = request.user if request.user.is_authenticated else None
         report.reviewed_at = timezone.now()
-        report.review_notes = request.data.get('notes', 'Approved by research reviewer.')
+        report.review_notes = request.data.get('notes', 'Approved by research reviewer for sales outreach.')
         report.save()
 
-        lead.lead_status = LeadStatus.SCORED
+        # 1. Analyze and generate business requirements if not already present
+        from requirements_ai.services import RequirementAnalysisService
+        if not lead.requirements.exists():
+            try:
+                RequirementAnalysisService.analyze_requirements_for_lead(lead)
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).warning(f"Requirement analysis failed during approval for {lead.id}: {e}")
+
+        # 2. Generate personalized outreach email draft
+        from communications.services import EmailDraftingService
+        from communications.models import EmailDraft, EmailDraftStatus
+
+        draft = EmailDraft.objects.filter(lead=lead, status=EmailDraftStatus.AWAITING_APPROVAL).first()
+        if not draft:
+            try:
+                draft = EmailDraftingService.generate_draft_for_lead(lead)
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).error(f"Failed to generate draft during approval for {lead.id}: {e}")
+
+        lead.lead_status = LeadStatus.AWAITING_APPROVAL
+        lead.is_email_generated = True
         lead.save()
 
         return Response({
-            'message': f'Company report for {lead.company_name} approved for outreach.',
-            'human_review_status': 'APPROVED'
+            'message': f'Company report for {lead.company_name} approved! Personalized email draft generated and sent to Email Outreach queue.',
+            'human_review_status': 'APPROVED',
+            'lead_status': lead.lead_status,
+            'draft_id': str(draft.id) if draft else None,
+            'subject': draft.subject if draft else None
         })
+
+    @action(detail=True, methods=['post'], url_path='send-to-outreach')
+    def send_to_outreach(self, request, pk=None):
+        """
+        Alias for approve_report to dispatch lead directly into the Email Outreach queue.
+        """
+        return self.approve_report(request, pk=pk)
 
     @action(detail=True, methods=['post'], url_path='reject-report')
     def reject_report(self, request, pk=None):

@@ -449,6 +449,7 @@ export const App: React.FC = () => {
               onDeleteAll={handleDeleteAllLeads}
               onRefresh={loadData}
               showToast={showToast}
+              onNavigate={setCurrentTab}
             />
           )}
 

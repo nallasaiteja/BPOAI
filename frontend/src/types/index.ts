@@ -349,6 +349,9 @@ export interface Lead {
   score_category_display?: string;
   score_breakdown?: Record<string, any>;
   score_explanation?: string;
+  is_email_generated?: boolean;
+  is_crawled?: boolean;
+  is_scored?: boolean;
   company_detail?: Company;
   research_report?: ResearchReport;
   requirements?: BusinessRequirement[];

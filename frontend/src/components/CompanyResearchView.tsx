@@ -4,7 +4,7 @@ import {
   ExternalLink, Layers, Search, Cpu, Target, Flag, Bug, Loader2, Trash2,
   RefreshCw, Sparkles, ShieldAlert, Award, FileText, Check, HelpCircle,
   XCircle, ChevronRight, Sliders, ArrowUpRight, Clock, Users, DollarSign,
-  Briefcase, Compass, FileCheck, ThumbsUp, ThumbsDown
+  Briefcase, Compass, FileCheck, ThumbsUp, ThumbsDown, Mail
 } from 'lucide-react';
 import { Lead, ResearchReport, ICPConfig, ResearchJob } from '../types';
 import { api } from '../services/api';
@@ -16,6 +16,7 @@ interface CompanyResearchViewProps {
   onDeleteAll?: () => Promise<void>;
   onRefresh?: () => Promise<void>;
   showToast?: (msg: string) => void;
+  onNavigate?: (tab: string) => void;
 }
 
 type DetailTab = 
@@ -37,6 +38,7 @@ export const CompanyResearchView: React.FC<CompanyResearchViewProps> = ({
   onDeleteAll,
   onRefresh,
   showToast,
+  onNavigate,
 }) => {
   const [selectedLeadId, setSelectedLeadId] = useState<string>(leads[0]?.id || '');
   const [activeTab, setActiveTab] = useState<DetailTab>('overview');
@@ -128,9 +130,13 @@ export const CompanyResearchView: React.FC<CompanyResearchViewProps> = ({
   const handleApproveReport = async (leadId: string) => {
     setIsReviewing(true);
     try {
-      await api.approveResearchReport(leadId);
-      if (showToast) showToast('Company report approved for sales outreach.');
+      const res = await api.approveResearchReport(leadId);
+      if (showToast) {
+        showToast(res?.message || 'Company report approved! Personalized email draft generated and sent to Email Outreach queue.');
+      }
       if (onRefresh) await onRefresh();
+    } catch (err: any) {
+      alert('Error approving report: ' + (err?.message || 'Could not approve report'));
     } finally {
       setIsReviewing(false);
     }
@@ -471,12 +477,23 @@ export const CompanyResearchView: React.FC<CompanyResearchViewProps> = ({
                           <button
                             onClick={() => handleApproveReport(activeLead.id)}
                             disabled={isReviewing}
-                            className="px-2.5 py-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition-colors flex items-center gap-1"
-                            title="Approve report for outreach"
+                            className="px-3 py-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition-colors flex items-center gap-1.5 shadow-2xs"
+                            title="Approve report and generate personalized email outreach"
                           >
                             <ThumbsUp className="w-3.5 h-3.5" />
-                            <span>Approve</span>
+                            <span>{report.human_review_status === 'APPROVED' ? 'Re-Approve & Outreach' : 'Approve & Send to Outreach'}</span>
                           </button>
+
+                          {(activeLead.is_email_generated || report.human_review_status === 'APPROVED') && onNavigate && (
+                            <button
+                              onClick={() => onNavigate('approvals')}
+                              className="px-3 py-1.5 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition-colors flex items-center gap-1.5 shadow-2xs"
+                              title="Open Email Outreach queue to inspect and send generated draft"
+                            >
+                              <Mail className="w-3.5 h-3.5 text-blue-600" />
+                              <span>View in Email Outreach &rarr;</span>
+                            </button>
+                          )}
 
                           <button
                             onClick={() => handleRejectReport(activeLead.id)}
