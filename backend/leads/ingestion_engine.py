@@ -529,6 +529,7 @@ class IntelligentIngestionEngine:
         preview_records: List[Dict[str, Any]] = []
         rejection_report: List[Dict[str, Any]] = []
         seen_file_emails = set()
+        seen_file_companies = set()
         duplicate_count = 0
         invalid_count = 0
         incomplete_count = 0
@@ -600,6 +601,7 @@ class IntelligentIngestionEngine:
 
             # Check Duplicates
             is_duplicate = False
+            clean_company_normalized = re.sub(r'[^a-zA-Z0-9]', '', clean_company.lower())
             if clean_email and clean_email in existing_emails:
                 is_duplicate = True
                 errors.append(f"Duplicate contact: '{clean_email}' already exists in CRM database")
@@ -608,10 +610,15 @@ class IntelligentIngestionEngine:
                 errors.append(f"Duplicate company: '{clean_company}' already exists in CRM database")
             elif clean_email and clean_email in seen_file_emails:
                 is_duplicate = True
-                errors.append(f"Duplicate row within this uploaded file for email '{clean_email}'")
+                errors.append(f"Duplicate contact row within this uploaded file for email '{clean_email}'")
+            elif clean_company_normalized and clean_company_normalized in seen_file_companies:
+                is_duplicate = True
+                errors.append(f"Duplicate company row within this uploaded file for '{clean_company}'")
 
             if clean_email:
                 seen_file_emails.add(clean_email)
+            if clean_company_normalized:
+                seen_file_companies.add(clean_company_normalized)
 
             if is_duplicate:
                 duplicate_count += 1

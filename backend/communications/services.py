@@ -35,16 +35,29 @@ class EmailDraftingService:
             email_type=email_type
         )
 
-        draft = EmailDraft.objects.create(
-            lead=lead,
-            sender_account=sender_account,
-            email_type=email_type,
-            subject=draft_content['subject'],
-            body_html=draft_content['body_html'],
-            body_plain=draft_content['body_plain'],
-            status=EmailDraftStatus.AWAITING_APPROVAL,
-            confidence_score=draft_content.get('confidence_score', 92)
-        )
+        # Deduplicate: Update existing draft for this lead or create a new one
+        existing_draft = EmailDraft.objects.filter(lead=lead, email_type=email_type).first()
+        if existing_draft:
+            existing_draft.subject = draft_content['subject']
+            existing_draft.body_html = draft_content['body_html']
+            existing_draft.body_plain = draft_content['body_plain']
+            existing_draft.confidence_score = draft_content.get('confidence_score', 92)
+            existing_draft.status = EmailDraftStatus.AWAITING_APPROVAL
+            if sender_account:
+                existing_draft.sender_account = sender_account
+            existing_draft.save()
+            draft = existing_draft
+        else:
+            draft = EmailDraft.objects.create(
+                lead=lead,
+                sender_account=sender_account,
+                email_type=email_type,
+                subject=draft_content['subject'],
+                body_html=draft_content['body_html'],
+                body_plain=draft_content['body_plain'],
+                status=EmailDraftStatus.AWAITING_APPROVAL,
+                confidence_score=draft_content.get('confidence_score', 92)
+            )
 
         lead.is_email_generated = True
         lead.lead_status = LeadStatus.AWAITING_APPROVAL

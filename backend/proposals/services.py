@@ -31,6 +31,19 @@ class ProposalGenerationService:
         agent9 = ProposalGenerationAgent()
         proposal_content = agent9.generate_proposal(lead=lead, report=report, requirements=requirements)
 
+        # Deduplicate: Update existing proposal for this lead or create a new one
+        existing_proposal = Proposal.objects.filter(lead=lead).first()
+        if existing_proposal:
+            existing_proposal.proposal_type = proposal_content.get('type', ProposalType.AI_AUTOMATION)
+            existing_proposal.title = proposal_content.get('title', f"Digital Solutions Proposal for {lead.company_name}")
+            existing_proposal.executive_summary = proposal_content.get('executive_summary', '')
+            existing_proposal.identified_challenges = proposal_content.get('identified_challenges', '')
+            existing_proposal.proposed_solution = proposal_content.get('proposed_solution', '')
+            existing_proposal.deliverables = proposal_content.get('deliverables', [])
+            existing_proposal.project_timeline = proposal_content.get('timeline', '6 - 8 Weeks')
+            existing_proposal.save()
+            return existing_proposal
+
         proposal = Proposal.objects.create(
             lead=lead,
             proposal_type=proposal_content.get('type', ProposalType.AI_AUTOMATION),
