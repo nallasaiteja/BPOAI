@@ -1,6 +1,8 @@
 import { 
   Lead, ServiceCatalogue, BusinessRequirement, 
-  EmailDraft, Proposal, DashboardKPIs, ExecutiveInsights 
+  EmailDraft, Proposal, DashboardKPIs, ExecutiveInsights,
+  FileInspectionResult, MappingPreviewResult, CommitImportResult,
+  LeadMappingTemplate, ImportBatch
 } from '../types';
 
 const BASE_URL = (import.meta.env.VITE_API_BASE_URL || '/api/v1').replace(/\/+$/, '');
@@ -157,6 +159,81 @@ class ApiService {
       method: 'POST',
       body: formData,
     });
+  }
+
+  // Intelligent Bulk Lead Upload & Mapping
+  async inspectLeadFile(file: File, sheetName?: string, hasHeaders?: boolean): Promise<FileInspectionResult> {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (sheetName) formData.append('sheet_name', sheetName);
+    if (typeof hasHeaders === 'boolean') formData.append('has_headers', String(hasHeaders));
+    return this.request('/leads/inspect-file/', {
+      method: 'POST',
+      body: formData,
+    });
+  }
+
+  async previewLeadMapping(
+    fileToken: string,
+    mappings: Record<string, string>,
+    hasHeaders: boolean,
+    sheetName?: string
+  ): Promise<MappingPreviewResult> {
+    return this.request('/leads/preview-mapping/', {
+      method: 'POST',
+      body: JSON.stringify({
+        file_token: fileToken,
+        mappings,
+        has_headers: hasHeaders,
+        sheet_name: sheetName,
+      }),
+    });
+  }
+
+  async commitLeadImport(
+    fileToken: string,
+    mappings: Record<string, string>,
+    hasHeaders: boolean,
+    sheetName?: string,
+    saveTemplateName?: string
+  ): Promise<CommitImportResult> {
+    return this.request('/leads/commit-import/', {
+      method: 'POST',
+      body: JSON.stringify({
+        file_token: fileToken,
+        mappings,
+        has_headers: hasHeaders,
+        sheet_name: sheetName,
+        save_template_name: saveTemplateName,
+      }),
+    });
+  }
+
+  getRejectionReportUrl(batchId: string): string {
+    return `${BASE_URL}/leads/rejection-report/?batch_id=${batchId}`;
+  }
+
+  async getMappingTemplates(): Promise<LeadMappingTemplate[]> {
+    const res = await this.request<{ results: LeadMappingTemplate[] }>('/mapping-templates/');
+    return res.results || (res as any);
+  }
+
+  async saveMappingTemplate(data: { name: string; mappings: Record<string, string>; description?: string; is_default?: boolean }): Promise<LeadMappingTemplate> {
+    return this.request('/mapping-templates/', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteMappingTemplate(id: string): Promise<any> {
+    return this.request(`/mapping-templates/${id}/`, {
+      method: 'DELETE',
+    });
+  }
+
+  async getImportBatches(): Promise<ImportBatch[]> {
+    const res = await this.request<{ results: ImportBatch[] }>('/import-batches/');
+    return res.results || (res as any);
   }
 
   async deleteAllLeads(): Promise<any> {

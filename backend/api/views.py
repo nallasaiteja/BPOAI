@@ -361,6 +361,236 @@ class LeadViewSet(viewsets.ModelViewSet):
         except Exception as e:
             return Response({'error': f'Failed to parse file: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
 
+    @action(detail=False, methods=['post'], url_path='inspect-file')
+    def inspect_file(self, request):
+        """
+        Inspects an uploaded spreadsheet (CSV/XLSX), extracts sheet names,
+        determines header existence, and generates intelligent column mapping suggestions.
+        """
+        import uuid
+        from leads.ingestion_engine import IntelligentIngestionEngine, TARGET_FIELDS, save_temp_inspection
+        from leads.models import LeadMappingTemplate
+        from api.serializers import LeadMappingTemplateSerializer
+
+        file_obj = request.FILES.get('file')
+        if not file_obj:
+            return Response({'error': 'No file was provided.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        sheet_name = request.data.get('sheet_name')
+        has_headers_override = request.data.get('has_headers')
+
+        try:
+            file_bytes = file_obj.read()
+            raw_data = IntelligentIngestionEngine.parse_file_raw(file_bytes, file_obj.name, sheet_name=sheet_name)
+            
+            # Header detection
+            header_detection = IntelligentIngestionEngine.detect_headers(raw_data['raw_rows'])
+            has_headers = header_detection['has_headers']
+            if has_headers_override is not None and str(has_headers_override).strip() != '':
+                has_headers = str(has_headers_override).lower() in ('true', '1', 'yes')
+
+            columns_analysis = IntelligentIngestionEngine.analyze_columns(
+                raw_data['raw_rows'],
+                has_headers=has_headers,
+                header_row_index=header_detection.get('header_row_index')
+            )
+
+            # Format columns with col_letter and original_col key
+            for col in columns_analysis:
+                c_idx = col['column_index']
+                letter = ""
+                temp_idx = c_idx
+                while temp_idx >= 0:
+                    letter = chr(65 + (temp_idx % 26)) + letter
+                    temp_idx = (temp_idx // 26) - 1
+                col['col_letter'] = letter
+                col['original_col'] = f"col_{c_idx}"
+                col['display_name'] = col.get('header_name') or f"Column {letter}"
+
+            file_token = str(uuid.uuid4())
+            save_temp_inspection(file_token, {
+                'filename': raw_data['filename'],
+                'file_size': raw_data['file_size'],
+                'selected_sheet': raw_data['selected_sheet'],
+                'sheets': raw_data['sheets'],
+                'has_headers': has_headers,
+                'header_row_index': header_detection.get('header_row_index'),
+                'raw_rows': raw_data['raw_rows'],
+            })
+
+            templates = LeadMappingTemplate.objects.all()[:20]
+
+            header_reasons = [header_detection.get('reason', '')] if header_detection.get('reason') else []
+
+            return Response({
+                'file_token': file_token,
+                'filename': raw_data['filename'],
+                'file_type': raw_data['filename'].split('.')[-1].lower(),
+                'file_size': raw_data['file_size'],
+                'sheet_names': raw_data['sheets'],
+                'sheets': raw_data['sheets'],
+                'active_sheet': raw_data['selected_sheet'],
+                'selected_sheet': raw_data['selected_sheet'],
+                'total_rows': raw_data['total_rows'],
+                'has_headers': has_headers,
+                'effective_has_headers': has_headers,
+                'header_detection': header_detection,
+                'header_confidence': header_detection.get('confidence', 80),
+                'header_reasons': header_reasons,
+                'columns': columns_analysis,
+                'target_fields': TARGET_FIELDS,
+                'available_destinations': TARGET_FIELDS,
+                'saved_templates': LeadMappingTemplateSerializer(templates, many=True).data
+            })
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=False, methods=['post'], url_path='preview-mapping')
+    def preview_mapping(self, request):
+        """
+        Validates user-selected mappings on the cached spreadsheet and returns
+        summary metrics and live preview rows before committing.
+        """
+        from leads.ingestion_engine import IntelligentIngestionEngine, get_temp_inspection
+
+        file_token = request.data.get('file_token')
+        mappings = request.data.get('mappings', {})
+        has_headers = request.data.get('has_headers')
+
+        if not file_token:
+            return Response({'error': 'file_token is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        cached = get_temp_inspection(file_token)
+        if not cached:
+            return Response({'error': 'File session expired or not found. Please re-upload the file.'}, status=status.HTTP_404_NOT_FOUND)
+
+        if has_headers is None:
+            has_headers = cached.get('has_headers', True)
+        else:
+            has_headers = bool(has_headers)
+
+        try:
+            preview_result = IntelligentIngestionEngine.validate_and_preview_dataset(
+                raw_rows=cached['raw_rows'],
+                mappings=mappings,
+                has_headers=has_headers,
+                header_row_index=cached.get('header_row_index')
+            )
+            # Add sample_rows alias for frontend convenience
+            preview_result['sample_rows'] = [
+                {
+                    'row_num': r['row_number'],
+                    'status': 'valid',
+                    'errors': [],
+                    'normalized_data': r,
+                    'original_data': {}
+                }
+                for r in preview_result.get('preview_records', [])
+            ]
+            return Response(preview_result)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=False, methods=['post'], url_path='commit-import')
+    def commit_import(self, request):
+        """
+        Performs the final transactional import, saving valid records, generating rejection reports,
+        and optionally saving a reusable mapping template.
+        """
+        from leads.ingestion_engine import IntelligentIngestionEngine, get_temp_inspection, delete_temp_inspection
+        from leads.models import LeadMappingTemplate
+
+        file_token = request.data.get('file_token')
+        mappings = request.data.get('mappings', {})
+        has_headers = bool(request.data.get('has_headers', True))
+        template_name = (request.data.get('template_name') or request.data.get('save_template_name') or '').strip()
+
+        if not file_token:
+            return Response({'error': 'file_token is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        cached = get_temp_inspection(file_token)
+        if not cached:
+            return Response({'error': 'File session expired. Please re-upload the file.'}, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            val_result = IntelligentIngestionEngine.validate_and_preview_dataset(
+                raw_rows=cached['raw_rows'],
+                mappings=mappings,
+                has_headers=has_headers,
+                header_row_index=cached.get('header_row_index')
+            )
+
+            # Perform transactional commit
+            import_result = IntelligentIngestionEngine.commit_import(
+                valid_records=val_result['valid_records'],
+                rejection_report=val_result['rejection_report'],
+                file_name=cached['filename'],
+                file_size=cached['file_size'],
+                sheet_name=cached.get('selected_sheet', 'Sheet1'),
+                has_headers=has_headers,
+                mappings=mappings,
+                user=request.user
+            )
+
+            # Enrich response fields for frontend
+            import_result['batch_number'] = import_result.get('batch_code')
+            import_result['has_rejections'] = import_result.get('rejected_count', 0) > 0
+            import_result['summary_message'] = import_result.get('message', '')
+            import_result['rejection_report_url'] = f"/api/v1/leads/rejection-report/?batch_id={import_result.get('batch_id')}"
+
+            # Optionally save template
+            if template_name:
+                LeadMappingTemplate.objects.update_or_create(
+                    name=template_name,
+                    defaults={
+                        'mappings': mappings,
+                        'created_by': request.user if request.user.is_authenticated else None
+                    }
+                )
+
+            # Clean up cached file
+            delete_temp_inspection(file_token)
+
+            return Response(import_result, status=status.HTTP_201_CREATED)
+        except Exception as e:
+            return Response({'error': f"Failed to commit import: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=False, methods=['get'], url_path='rejection-report')
+    def rejection_report(self, request):
+        """
+        Generates and streams a safe CSV rejection report with exact row numbers and errors.
+        """
+        import csv
+        from django.http import HttpResponse
+        from leads.models import ImportBatch
+
+        batch_id = request.query_params.get('batch_id')
+        if not batch_id:
+            return Response({'error': 'batch_id parameter is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            batch = ImportBatch.objects.get(id=batch_id)
+        except Exception:
+            return Response({'error': 'Import batch not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = f'attachment; filename="rejection_report_{batch.batch_code}.csv"'
+
+        writer = csv.writer(response)
+        writer.writerow(['Row Number', 'Status', 'Company Name', 'Primary Email', 'Reasons'])
+
+        for item in batch.rejection_report:
+            reasons_str = "; ".join(item.get('reasons', []))
+            writer.writerow([
+                item.get('row_number', ''),
+                item.get('status', 'INVALID'),
+                item.get('company_name', ''),
+                item.get('business_email', ''),
+                reasons_str
+            ])
+
+        return response
+
     @action(detail=False, methods=['delete', 'post'])
     def delete_all(self, request):
         """
@@ -768,3 +998,24 @@ def dashboard_analytics_view(request):
         'status_distribution': status_distribution,
         'executive_insights': executive_insights
     })
+
+
+class LeadMappingTemplateViewSet(viewsets.ModelViewSet):
+    from leads.models import LeadMappingTemplate
+    from api.serializers import LeadMappingTemplateSerializer
+    queryset = LeadMappingTemplate.objects.all()
+    serializer_class = LeadMappingTemplateSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def perform_create(self, serializer):
+        user = self.request.user if self.request.user.is_authenticated else None
+        serializer.save(created_by=user)
+
+
+class ImportBatchViewSet(viewsets.ReadOnlyModelViewSet):
+    from leads.models import ImportBatch
+    from api.serializers import ImportBatchSerializer
+    queryset = ImportBatch.objects.all().order_by('-created_at')
+    serializer_class = ImportBatchSerializer
+    permission_classes = [permissions.IsAuthenticated]
+

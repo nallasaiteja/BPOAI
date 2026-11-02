@@ -73,25 +73,83 @@ class LeadScoreCategory(models.TextChoices):
     NOT_RELEVANT = 'NOT_RELEVANT', _('Not Relevant')
     NEEDS_VERIFICATION = 'NEEDS_VERIFICATION', _('Needs Verification')
 
+class ImportBatch(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    batch_code = models.CharField(max_length=64, unique=True, editable=False)
+    file_name = models.CharField(max_length=255)
+    file_size = models.IntegerField(default=0)
+    sheet_name = models.CharField(max_length=150, blank=True, null=True)
+    has_headers = models.BooleanField(default=True)
+    total_rows = models.IntegerField(default=0)
+    imported_count = models.IntegerField(default=0)
+    duplicate_count = models.IntegerField(default=0)
+    invalid_count = models.IntegerField(default=0)
+    mapping_decisions = models.JSONField(default=dict, blank=True)
+    rejection_report = models.JSONField(default=list, blank=True)
+    uploaded_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='import_batches')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def save(self, *args, **kwargs):
+        if not self.batch_code:
+            import random
+            self.batch_code = f"BATCH-{random.randint(100000, 999999)}"
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"[{self.batch_code}] {self.file_name} ({self.imported_count} leads)"
+
+class LeadMappingTemplate(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=150, unique=True)
+    description = models.CharField(max_length=300, blank=True, null=True)
+    mappings = models.JSONField(default=dict)  # column_name/letter -> target_field
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='mapping_templates')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-updated_at']
+
+    def __str__(self):
+        return self.name
+
 class Lead(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     lead_code = models.CharField(max_length=32, unique=True, editable=False, db_index=True)
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='leads', null=True, blank=True)
     company = models.ForeignKey(Company, on_delete=models.SET_NULL, null=True, blank=True, related_name='leads')
+    import_batch = models.ForeignKey(ImportBatch, on_delete=models.SET_NULL, null=True, blank=True, related_name='leads')
 
     # Core required fields
     company_name = models.CharField(max_length=255, db_index=True)
     contact_person = models.CharField(max_length=255, blank=True, null=True)
+    first_name = models.CharField(max_length=150, blank=True, null=True)
+    last_name = models.CharField(max_length=150, blank=True, null=True)
     designation = models.CharField(max_length=150, blank=True, null=True)
+    job_title = models.CharField(max_length=150, blank=True, null=True)
     business_email = models.EmailField(max_length=255, db_index=True)
+    secondary_email = models.EmailField(max_length=255, blank=True, null=True)
     contact_number = models.CharField(max_length=50, blank=True, null=True)
+    mobile_number = models.CharField(max_length=50, blank=True, null=True)
     country = models.CharField(max_length=100, default='United States', blank=True, null=True)
     state = models.CharField(max_length=100, blank=True, null=True)
     city = models.CharField(max_length=100, blank=True, null=True)
     industry = models.CharField(max_length=150, blank=True, null=True)
     website_url = models.URLField(max_length=500, blank=True, null=True)
+    company_description = models.TextField(blank=True, null=True)
+    employee_count = models.CharField(max_length=50, blank=True, null=True)
+    annual_revenue = models.CharField(max_length=100, blank=True, null=True)
+    linkedin_url = models.URLField(max_length=500, blank=True, null=True)
+    notes = models.TextField(blank=True, null=True)
     lead_source = models.CharField(max_length=50, choices=LeadSource.choices, default=LeadSource.MANUAL)
     lead_status = models.CharField(max_length=50, choices=LeadStatus.choices, default=LeadStatus.NEW)
+
+    # Ingestion metadata
+    original_row_number = models.IntegerField(null=True, blank=True)
+    raw_imported_data = models.JSONField(default=dict, blank=True)
 
     # Domain intelligence flags
     extracted_domain = models.CharField(max_length=255, blank=True, null=True)

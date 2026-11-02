@@ -436,6 +436,8 @@ export const App: React.FC = () => {
               onCreateLead={handleCreateLead}
               onDeleteLead={handleDeleteLead}
               onDeleteAll={handleDeleteAllLeads}
+              onRefresh={loadData}
+              showToast={showToast}
             />
           )}
 

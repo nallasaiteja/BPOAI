@@ -272,3 +272,95 @@ export interface ExecutiveInsights {
   strategic_recommendations: string[];
   executive_brief: string;
 }
+
+export interface ColumnSuggestion {
+  original_col: string;
+  col_letter: string;
+  sample_values: string[];
+  suggested_field: string;
+  suggested_field_label: string;
+  confidence: number;
+  reason: string;
+  field_category: string;
+  is_header: boolean;
+}
+
+export interface FileInspectionResult {
+  file_token: string;
+  filename: string;
+  file_type: string;
+  encoding?: string;
+  delimiter?: string;
+  sheet_names: string[];
+  active_sheet?: string;
+  total_rows: number;
+  has_headers: boolean;
+  header_confidence: number;
+  header_reasons: string[];
+  first_data_row_index: number;
+  columns: ColumnSuggestion[];
+  available_destinations: Array<{
+    field: string;
+    label: string;
+    category: string;
+    description: string;
+  }>;
+}
+
+export interface MappingPreviewRow {
+  row_num: number;
+  status: 'valid' | 'invalid' | 'duplicate';
+  errors: string[];
+  normalized_data: Record<string, any>;
+  original_data: Record<string, any>;
+}
+
+export interface MappingPreviewResult {
+  file_token: string;
+  total_rows: number;
+  valid_count: number;
+  invalid_count: number;
+  duplicate_count: number;
+  unmapped_columns: string[];
+  sample_rows: MappingPreviewRow[];
+  rejection_preview: Array<{
+    row_num: number;
+    reason: string;
+    field: string;
+    value: string;
+  }>;
+}
+
+export interface CommitImportResult {
+  batch_id: string;
+  batch_number: string;
+  total_rows: number;
+  imported_count: number;
+  rejected_count: number;
+  duplicate_count: number;
+  has_rejections: boolean;
+  rejection_report_url?: string;
+  summary_message: string;
+}
+
+export interface LeadMappingTemplate {
+  id: string;
+  name: string;
+  description?: string;
+  mappings: Record<string, string>;
+  is_default: boolean;
+  use_count: number;
+  created_at: string;
+}
+
+export interface ImportBatch {
+  id: string;
+  batch_number: string;
+  original_filename: string;
+  total_rows: number;
+  successful_rows: number;
+  failed_rows: number;
+  duplicate_rows: number;
+  status: string;
+  created_at: string;
+}

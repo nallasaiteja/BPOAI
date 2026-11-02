@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from core.models import User, Organization, AuditLog, Notification, AIUsageLog
-from leads.models import Lead, Company, CompanyDomain
+from leads.models import Lead, Company, CompanyDomain, ImportBatch, LeadMappingTemplate
 from research.models import ResearchReport, WebsitePage, CompanyProduct, CompanyService
 from requirements_ai.models import BusinessRequirement, ServiceCatalogue, LeadScore
 from communications.models import EmailAccount, EmailDraft, SentEmail, EmailReply, FollowUpSchedule
@@ -200,3 +200,23 @@ class AIUsageLogSerializer(serializers.ModelSerializer):
     class Meta:
         model = AIUsageLog
         fields = '__all__'
+
+
+class ImportBatchSerializer(serializers.ModelSerializer):
+    uploaded_by_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ImportBatch
+        fields = '__all__'
+
+    def get_uploaded_by_name(self, obj):
+        if obj.uploaded_by:
+            return f"{obj.uploaded_by.first_name} {obj.uploaded_by.last_name}".strip() or obj.uploaded_by.username
+        return "System"
+
+
+class LeadMappingTemplateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = LeadMappingTemplate
+        fields = '__all__'
+
