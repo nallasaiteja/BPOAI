@@ -495,93 +495,146 @@ export const CompanyResearchView: React.FC<CompanyResearchViewProps> = ({
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
         
         {/* Left Side: Companies Directory */}
-        <div className={`lg:col-span-4 bg-white rounded-xl border border-slate-200 p-3 shadow-xs space-y-2 ${
+        <div className={`lg:col-span-4 bg-white rounded-2xl border border-slate-200 p-4 shadow-xs space-y-3 ${
           mobileView === 'list' ? 'block' : 'hidden lg:block'
         }`}>
-          <div className="flex items-center justify-between border-b border-slate-100 pb-2 px-1">
-            <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-              Prospects ({filteredLeads.length})
-            </span>
-            <span className="text-[10px] text-slate-400">Click to inspect</span>
+          <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+            <div className="flex items-center gap-2">
+              <Building2 className="w-4 h-4 text-blue-600" />
+              <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                Verified Prospects ({filteredLeads.length})
+              </span>
+            </div>
+            <span className="text-[10px] text-slate-400 font-medium">Click to inspect</span>
           </div>
 
-          <div className="space-y-1.5 max-h-[720px] overflow-y-auto pr-1">
+          {/* Quick Search & Segmented Filter Bar in Left Directory */}
+          <div className="space-y-2">
+            <div className="relative">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
+              <input
+                type="text"
+                placeholder="Search verified prospects..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all placeholder:text-slate-400"
+              />
+            </div>
+            <div className="flex items-center gap-1 p-0.5 bg-slate-100 rounded-lg text-[11px]">
+              <button
+                onClick={() => setStatusFilter('ALL')}
+                className={`flex-1 py-1 rounded-md font-semibold transition-all cursor-pointer ${
+                  statusFilter === 'ALL' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                All ({verifiedLeads.length})
+              </button>
+              <button
+                onClick={() => setStatusFilter('HOT')}
+                className={`flex-1 py-1 rounded-md font-semibold transition-all cursor-pointer ${
+                  statusFilter === 'HOT' ? 'bg-white text-emerald-700 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Hot ({highPriorityProspects})
+              </button>
+              <button
+                onClick={() => setStatusFilter('WARM')}
+                className={`flex-1 py-1 rounded-md font-semibold transition-all cursor-pointer ${
+                  statusFilter === 'WARM' ? 'bg-white text-amber-700 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Warm ({warmProspects})
+              </button>
+              <button
+                onClick={() => setStatusFilter('PENDING')}
+                className={`flex-1 py-1 rounded-md font-semibold transition-all cursor-pointer ${
+                  statusFilter === 'PENDING' ? 'bg-white text-blue-700 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Pending
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-2 max-h-[720px] overflow-y-auto pr-1">
             {filteredLeads.length > 0 ? (
               filteredLeads.map((lead) => {
                 const isSelected = lead.id === selectedLeadId;
                 const r = lead.research_report;
                 const fitScore = r?.company_fit_score || 0;
                 const confScore = r?.research_confidence_score || 0;
+                const initial = (lead.company_name || 'C').charAt(0).toUpperCase();
 
                 return (
-                  <div
+                  <button
                     key={lead.id}
                     onClick={() => {
                       setSelectedLeadId(lead.id);
                       setMobileView('detail');
                     }}
-                    className={`p-3 rounded-xl border text-xs transition-all cursor-pointer group ${
+                    className={`w-full text-left p-3.5 rounded-xl border text-xs transition-all cursor-pointer group relative ${
                       isSelected 
-                        ? 'border-blue-600 bg-blue-50/60 shadow-xs' 
-                        : 'border-slate-100 hover:border-slate-300 hover:bg-slate-50'
+                        ? 'border-l-4 border-l-blue-600 border-blue-300 bg-gradient-to-r from-blue-50/70 via-indigo-50/20 to-white shadow-xs' 
+                        : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50/70'
                     }`}
                   >
-                    <div className="flex items-start justify-between gap-2 mb-1.5">
-                      <div className="min-w-0">
-                        <div className="font-bold text-slate-800 truncate text-xs">
-                          {lead.company_name}
-                        </div>
-                        <div className="text-[11px] text-slate-400 truncate flex items-center gap-1 mt-0.5">
-                          <Globe className="w-3 h-3 shrink-0" />
-                          <span>{lead.website_url || lead.extracted_domain || 'No website'}</span>
-                        </div>
+                    <div className="flex items-start gap-2.5">
+                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 transition-colors ${
+                        isSelected 
+                          ? 'bg-blue-600 text-white shadow-xs' 
+                          : 'bg-gradient-to-br from-blue-50 to-indigo-100 text-blue-700 border border-blue-200/60'
+                      }`}>
+                        {initial}
                       </div>
 
-                      {/* Score or Pending badge */}
-                      {r ? (
-                        <div className="text-right shrink-0">
-                          <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded ${
-                            fitScore >= 75 ? 'bg-emerald-100 text-emerald-800' :
-                            fitScore >= 50 ? 'bg-amber-100 text-amber-800' :
-                            'bg-slate-100 text-slate-700'
-                          }`}>
-                            {fitScore}/100
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-1 mb-1">
+                          <span className="font-bold text-slate-900 truncate text-xs flex items-center gap-1">
+                            <span>{lead.company_name}</span>
+                            <CheckCircle2 className="w-3 h-3 text-emerald-500 shrink-0" />
                           </span>
+                          {r ? (
+                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0 border ${
+                              fitScore >= 75 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                              fitScore >= 50 ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                              'bg-slate-100 text-slate-700 border-slate-200'
+                            }`}>
+                              {fitScore}/100
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500 shrink-0">
+                              Pending
+                            </span>
+                          )}
                         </div>
-                      ) : (
-                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 shrink-0">
-                          Pending
-                        </span>
-                      )}
-                    </div>
 
-                    <div className="flex items-center justify-between pt-1 border-t border-slate-100/80 text-[10px] text-slate-500">
-                      <span className="truncate max-w-[120px]">{lead.industry || 'General Industry'}</span>
-                      {r ? (
-                        <span className="text-blue-600 font-medium">{confScore}% Conf</span>
-                      ) : (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedLeadId(lead.id);
-                            handleInvestigate(lead.id);
-                          }}
-                          className="text-blue-600 hover:text-blue-800 font-semibold flex items-center gap-1"
-                        >
-                          <Sparkles className="w-3 h-3" />
-                          <span>Investigate</span>
-                        </button>
-                      )}
+                        <div className="text-[11px] text-slate-500 truncate flex items-center gap-1 mb-1">
+                          <Globe className="w-3 h-3 text-slate-400 shrink-0" />
+                          <span className="font-mono text-[10.5px]">{lead.website_url || lead.extracted_domain || 'No website'}</span>
+                        </div>
+
+                        <div className="flex items-center justify-between text-[10px] text-slate-400 pt-1 border-t border-slate-100">
+                          <span className="truncate max-w-[140px] text-slate-500">{lead.industry || 'General Industry'}</span>
+                          {r ? (
+                            <span className="text-blue-600 font-semibold">{confScore}% Conf</span>
+                          ) : (
+                            <span className="text-blue-600 font-semibold flex items-center gap-0.5">
+                              <Sparkles className="w-2.5 h-2.5" />
+                              Ready to Crawl
+                            </span>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                  </div>
+                  </button>
                 );
               })
             ) : (
-              <div className="text-center py-10 px-4 text-slate-400 text-xs space-y-1">
-                <ShieldCheck className="w-6 h-6 text-slate-300 mx-auto mb-2" />
-                <p className="font-semibold text-slate-600">No verified companies found</p>
+              <div className="text-center py-12 px-4 text-slate-400 text-xs space-y-2">
+                <ShieldCheck className="w-8 h-8 text-slate-300 mx-auto" />
+                <p className="font-semibold text-slate-600">No verified companies match</p>
                 <p className="text-[11px] text-slate-400">
-                  Only leads with confirmed corporate domain verification (green badge) appear in Company Intelligence.
+                  Try clearing the search or status filter.
                 </p>
               </div>
             )}
@@ -593,10 +646,10 @@ export const CompanyResearchView: React.FC<CompanyResearchViewProps> = ({
           mobileView === 'detail' ? 'block' : 'hidden lg:block'
         }`}>
           {activeLead ? (
-            <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
               
               {/* Header Profile Bar */}
-              <div className="p-4 sm:p-5 border-b border-slate-200 bg-slate-50/70">
+              <div className="p-5 border-b border-slate-200 bg-gradient-to-br from-slate-50 to-blue-50/20">
                 <button
                   onClick={() => setMobileView('list')}
                   className="lg:hidden inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700 hover:text-blue-900 mb-3 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg border border-blue-200 transition-colors cursor-pointer"
@@ -604,151 +657,158 @@ export const CompanyResearchView: React.FC<CompanyResearchViewProps> = ({
                   &larr; Back to Prospects List
                 </button>
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                  <div>
-                    <div className="flex items-center gap-2.5">
-                      <h2 className="text-base font-bold text-slate-800">
-                        {report?.official_company_name || activeLead.company_name}
-                      </h2>
-                      {activeLead.website_url && (
-                        <a
-                          href={activeLead.website_url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-slate-400 hover:text-blue-600 transition-colors"
-                          title="Open official site"
-                        >
-                          <ExternalLink className="w-3.5 h-3.5" />
-                        </a>
-                      )}
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white font-bold flex items-center justify-center text-lg shadow-sm shrink-0">
+                      {(report?.official_company_name || activeLead.company_name || 'C').charAt(0).toUpperCase()}
                     </div>
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h2 className="text-base font-bold text-slate-900">
+                          {report?.official_company_name || activeLead.company_name}
+                        </h2>
+                        {activeLead.website_url && (
+                          <a
+                            href={activeLead.website_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-slate-400 hover:text-blue-600 transition-colors p-0.5 rounded hover:bg-slate-200/50"
+                            title="Open official site in new tab"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" />
+                          </a>
+                        )}
+                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                          <span>Verified Domain</span>
+                        </span>
+                      </div>
 
-                    <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500 mt-1">
-                      <span>Domain: <b className="font-mono text-slate-700">{report?.canonical_domain || activeLead.extracted_domain || '—'}</b></span>
-                      <span>&bull;</span>
-                      <span>Industry: <b className="text-slate-700">{report?.industry || activeLead.industry || '—'}</b></span>
-                      <span>&bull;</span>
-                      <span>HQ: <b className="text-slate-700">{report?.headquarters || '—'}</b></span>
+                      <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500 mt-1">
+                        <span>Domain: <b className="font-mono text-slate-700">{report?.canonical_domain || activeLead.extracted_domain || '—'}</b></span>
+                        <span>&bull;</span>
+                        <span>Industry: <b className="text-slate-700">{report?.industry || activeLead.industry || '—'}</b></span>
+                        <span>&bull;</span>
+                        <span>HQ: <b className="text-slate-700">{report?.headquarters || '—'}</b></span>
+                      </div>
                     </div>
                   </div>
 
                   {/* Top Scores & Action Group */}
-                  <div className="flex flex-wrap items-center gap-2.5">
+                  <div className="flex flex-wrap items-center gap-2">
                     {report && (
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 mr-1">
                         {getScoreBadge(report.company_fit_score)}
                         {getConfidenceBadge(report.research_confidence_score)}
                       </div>
                     )}
 
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        onClick={() => handleInvestigate(activeLead.id, !!report)}
-                        disabled={isInvestigating}
-                        className="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 rounded-lg shadow-2xs flex items-center gap-1.5 transition-colors disabled:opacity-50 cursor-pointer"
-                        title="Crawl Website (Free, $0 Cost): Run deterministic rule-based crawler across robots.txt, sitemaps, and core company pages to extract verified business facts."
-                      >
-                        {isInvestigating ? (
-                          <>
-                            <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-600" />
-                            <span>Crawling Site...</span>
-                          </>
-                        ) : (
-                          <>
-                            <Globe className="w-3.5 h-3.5 text-slate-500" />
-                            <span>{report ? 'Re-crawl Site' : 'Crawl Site (Free)'}</span>
-                          </>
-                        )}
-                      </button>
-
-                      <button
-                        onClick={() => handleAiInvestigate(activeLead.id)}
-                        disabled={isAiInvestigating}
-                        className="px-3 py-1.5 text-xs font-semibold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-lg shadow-2xs flex items-center gap-1.5 transition-colors disabled:opacity-50 cursor-pointer"
-                        title="AI Deep Investigation: Launch Gemini AI to analyze crawled content, synthesize deep capabilities, and find tailored BPO/software opportunities."
-                      >
-                        {isAiInvestigating ? (
-                          <>
-                            <Loader2 className="w-3.5 h-3.5 animate-spin text-purple-600" />
-                            <span>AI Analyzing...</span>
-                          </>
-                        ) : (
-                          <>
-                            <Brain className="w-3.5 h-3.5 text-purple-600" />
-                            <span>AI Investigate</span>
-                          </>
-                        )}
-                      </button>
-
-                      {report && (
+                    <button
+                      onClick={() => handleInvestigate(activeLead.id, !!report)}
+                      disabled={isInvestigating}
+                      className="px-3 py-2 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl shadow-2xs flex items-center gap-1.5 transition-all disabled:opacity-50 cursor-pointer"
+                      title="Crawl Website (Free, $0 Cost): Run deterministic rule-based crawler across robots.txt, sitemaps, and core company pages to extract verified business facts."
+                    >
+                      {isInvestigating ? (
                         <>
-                          <button
-                            onClick={() => handleRecalculateScore(activeLead.id)}
-                            disabled={isRecalculating}
-                            className="p-1.5 text-slate-600 hover:text-slate-800 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer"
-                            title="Recalculate Fit Score: Re-evaluates all findings against active Ideal Customer Profile (ICP) weights and updates the 100-point score."
-                          >
-                            <RefreshCw className={`w-3.5 h-3.5 ${isRecalculating ? 'animate-spin' : ''}`} />
-                          </button>
-
-                          <button
-                            onClick={() => handleApproveReport(activeLead.id)}
-                            disabled={isReviewing}
-                            className="px-3 py-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition-colors flex items-center gap-1.5 shadow-2xs cursor-pointer"
-                            title="Approve & Send to Outreach: Gives senior sign-off to this intelligence report and generates a personalized cold intro email draft in the Outreach Approval Queue."
-                          >
-                            <ThumbsUp className="w-3.5 h-3.5" />
-                            <span>{report.human_review_status === 'APPROVED' ? 'Re-Approve & Outreach' : 'Approve & Send to Outreach'}</span>
-                          </button>
-
-                          {(activeLead.is_email_generated || report.human_review_status === 'APPROVED') && onNavigate && (
-                            <button
-                              onClick={() => onNavigate('approvals')}
-                              className="px-3 py-1.5 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition-colors flex items-center gap-1.5 shadow-2xs cursor-pointer"
-                              title="View in Email Outreach: Navigate to Email Outreach tab to review, edit, or dispatch the personalized email draft."
-                            >
-                              <Mail className="w-3.5 h-3.5 text-blue-600" />
-                              <span>View in Email Outreach &rarr;</span>
-                            </button>
-                          )}
-
-                          <button
-                            onClick={() => handleRejectReport(activeLead.id)}
-                            disabled={isReviewing}
-                            className="p-1.5 text-rose-600 hover:text-rose-800 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-colors cursor-pointer"
-                            title="Disqualify Company: Flags this lead as unqualified or lacking sufficient public evidence for outbound sales."
-                          >
-                            <ThumbsDown className="w-3.5 h-3.5" />
-                          </button>
-
-                          {onDeleteLead && (
-                            <button
-                              onClick={() => {
-                                if (window.confirm(`Delete lead '${activeLead.company_name}' and all associated intelligence?`)) {
-                                  onDeleteLead(activeLead.id);
-                                }
-                              }}
-                              className="p-1.5 text-rose-500 hover:text-rose-700 bg-white hover:bg-rose-50 border border-slate-200 hover:border-rose-200 rounded-lg transition-colors cursor-pointer"
-                              title="Delete Lead: Permanently delete this company and its research from the CRM."
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          )}
+                          <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-600" />
+                          <span>Crawling Site...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Globe className="w-3.5 h-3.5 text-slate-500" />
+                          <span>{report ? 'Re-crawl' : 'Crawl Site (Free)'}</span>
                         </>
                       )}
-                    </div>
+                    </button>
+
+                    <button
+                      onClick={() => handleAiInvestigate(activeLead.id)}
+                      disabled={isAiInvestigating}
+                      className="px-3.5 py-2 text-xs font-bold text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 rounded-xl shadow-md shadow-purple-500/20 flex items-center gap-1.5 transition-all disabled:opacity-50 cursor-pointer"
+                      title="AI Deep Investigation: Launch Gemini AI to analyze crawled content, synthesize deep capabilities, and find tailored BPO/software opportunities."
+                    >
+                      {isAiInvestigating ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />
+                          <span>Analyzing...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Brain className="w-3.5 h-3.5" />
+                          <span>AI Deep Analysis</span>
+                        </>
+                      )}
+                    </button>
+
+                    {report && (
+                      <>
+                        <button
+                          onClick={() => handleRecalculateScore(activeLead.id)}
+                          disabled={isRecalculating}
+                          className="p-2 text-slate-600 hover:text-slate-800 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-all cursor-pointer shadow-2xs"
+                          title="Recalculate Fit Score: Re-evaluates all findings against active Ideal Customer Profile (ICP) weights and updates the 100-point score."
+                        >
+                          <RefreshCw className={`w-3.5 h-3.5 ${isRecalculating ? 'animate-spin' : ''}`} />
+                        </button>
+
+                        <button
+                          onClick={() => handleApproveReport(activeLead.id)}
+                          disabled={isReviewing}
+                          className="px-3.5 py-2 text-xs font-bold text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 rounded-xl shadow-md shadow-emerald-500/20 transition-all flex items-center gap-1.5 cursor-pointer"
+                          title="Approve & Send to Outreach: Gives senior sign-off to this intelligence report and generates a personalized cold intro email draft in the Outreach Approval Queue."
+                        >
+                          <ThumbsUp className="w-3.5 h-3.5" />
+                          <span>{report.human_review_status === 'APPROVED' ? 'Re-Approve' : 'Approve & Outreach'}</span>
+                        </button>
+
+                        {(activeLead.is_email_generated || report.human_review_status === 'APPROVED') && onNavigate && (
+                          <button
+                            onClick={() => onNavigate('approvals')}
+                            className="px-3 py-2 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-xl transition-all flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                            title="View in Email Outreach: Navigate to Email Outreach tab to review, edit, or dispatch the personalized email draft."
+                          >
+                            <Mail className="w-3.5 h-3.5 text-blue-600" />
+                            <span>Outreach &rarr;</span>
+                          </button>
+                        )}
+
+                        <button
+                          onClick={() => handleRejectReport(activeLead.id)}
+                          disabled={isReviewing}
+                          className="p-2 text-rose-600 hover:text-rose-800 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-xl transition-colors cursor-pointer shadow-2xs"
+                          title="Disqualify Company: Flags this lead as unqualified or lacking sufficient public evidence for outbound sales."
+                        >
+                          <ThumbsDown className="w-3.5 h-3.5" />
+                        </button>
+
+                        {onDeleteLead && (
+                          <button
+                            onClick={() => {
+                              if (window.confirm(`Delete lead '${activeLead.company_name}' and all associated intelligence?`)) {
+                                onDeleteLead(activeLead.id);
+                              }
+                            }}
+                            className="p-2 text-rose-500 hover:text-rose-700 bg-white hover:bg-rose-50 border border-slate-200 hover:border-rose-200 rounded-xl transition-colors cursor-pointer shadow-2xs"
+                            title="Delete Lead: Permanently delete this company and its research from the CRM."
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </>
+                    )}
                   </div>
                 </div>
 
                 {/* Qualification Alert / Status Banner */}
                 {report && (
-                  <div className="mt-3 pt-3 border-t border-slate-200/80 flex items-center justify-between text-xs">
+                  <div className="mt-3.5 pt-3 border-t border-slate-200/80 flex flex-wrap items-center justify-between gap-2 text-xs">
                     <div className="flex items-center gap-2">
                       <span className="font-semibold text-slate-700">ICP Status:</span>
-                      <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${
-                        report.qualification_status === 'QUALIFIED_HOT' ? 'bg-emerald-100 text-emerald-800' :
-                        report.qualification_status === 'QUALIFIED_WARM' ? 'bg-amber-100 text-amber-800' :
-                        report.qualification_status === 'INSUFFICIENT_EVIDENCE' ? 'bg-rose-100 text-rose-800' :
-                        'bg-slate-100 text-slate-700'
+                      <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${
+                        report.qualification_status === 'QUALIFIED_HOT' ? 'bg-emerald-50 text-emerald-800 border-emerald-200' :
+                        report.qualification_status === 'QUALIFIED_WARM' ? 'bg-amber-50 text-amber-800 border-amber-200' :
+                        report.qualification_status === 'INSUFFICIENT_EVIDENCE' ? 'bg-rose-50 text-rose-800 border-rose-200' :
+                        'bg-slate-100 text-slate-700 border-slate-200'
                       }`}>
                         {report.qualification_display || report.qualification_status}
                       </span>
@@ -764,96 +824,96 @@ export const CompanyResearchView: React.FC<CompanyResearchViewProps> = ({
               {/* 10 Navigation Tabs */}
               {report ? (
                 <div>
-                  <div className="flex items-center gap-1.5 px-3 sm:px-4 py-2 border-b border-slate-200 overflow-x-auto no-scrollbar text-xs bg-slate-50/50">
+                  <div className="flex items-center gap-1.5 px-3 sm:px-4 py-2.5 border-b border-slate-200 overflow-x-auto no-scrollbar text-xs bg-slate-50/50">
                     <button
                       onClick={() => setActiveTab('overview')}
                       title="1. Overview: Executive summary, company description, business model, and high-level fit scorecard."
-                      className={`py-1.5 px-3 font-semibold rounded-lg transition-all whitespace-nowrap cursor-pointer shrink-0 ${
-                        activeTab === 'overview' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-200/70 hover:text-slate-900'
+                      className={`py-1.5 px-3 font-semibold rounded-xl transition-all whitespace-nowrap cursor-pointer shrink-0 ${
+                        activeTab === 'overview' ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-xs font-bold' : 'text-slate-600 hover:bg-slate-200/70 hover:text-slate-900'
                       }`}
                     >
-                      1. Overview
+                      📊 1. Overview
                     </button>
                     <button
                       onClick={() => setActiveTab('website')}
                       title="2. Website: Discovered pages, crawl depth, HTTP status, robots.txt compliance, and sitemap detection."
-                      className={`py-1.5 px-3 font-semibold rounded-lg transition-all whitespace-nowrap cursor-pointer shrink-0 ${
-                        activeTab === 'website' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-200/70 hover:text-slate-900'
+                      className={`py-1.5 px-3 font-semibold rounded-xl transition-all whitespace-nowrap cursor-pointer shrink-0 ${
+                        activeTab === 'website' ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-xs font-bold' : 'text-slate-600 hover:bg-slate-200/70 hover:text-slate-900'
                       }`}
                     >
-                      2. Website ({report.pages?.length || 0})
+                      🌐 2. Website ({report.pages?.length || 0})
                     </button>
                     <button
                       onClick={() => setActiveTab('products_services')}
                       title="3. Products & Services: Identified product catalog, core business services, solutions offered, and publicly stated pricing."
-                      className={`py-1.5 px-3 font-semibold rounded-lg transition-all whitespace-nowrap cursor-pointer shrink-0 ${
-                        activeTab === 'products_services' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-200/70 hover:text-slate-900'
+                      className={`py-1.5 px-3 font-semibold rounded-xl transition-all whitespace-nowrap cursor-pointer shrink-0 ${
+                        activeTab === 'products_services' ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-xs font-bold' : 'text-slate-600 hover:bg-slate-200/70 hover:text-slate-900'
                       }`}
                     >
-                      3. Products & Services
+                      📦 3. Products & Services
                     </button>
                     <button
                       onClick={() => setActiveTab('market')}
                       title="4. Market & Clients: Operating countries, target customer segments, B2B/B2C classification, and documented clients/partners."
-                      className={`py-1.5 px-3 font-semibold rounded-lg transition-all whitespace-nowrap cursor-pointer shrink-0 ${
-                        activeTab === 'market' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-200/70 hover:text-slate-900'
+                      className={`py-1.5 px-3 font-semibold rounded-xl transition-all whitespace-nowrap cursor-pointer shrink-0 ${
+                        activeTab === 'market' ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-xs font-bold' : 'text-slate-600 hover:bg-slate-200/70 hover:text-slate-900'
                       }`}
                     >
-                      4. Market & Clients
+                      🎯 4. Market & Clients
                     </button>
                     <button
                       onClick={() => setActiveTab('technology')}
                       title="5. Technology: Detected web technologies, programming frameworks, cloud infrastructure, and technical maturity."
-                      className={`py-1.5 px-3 font-semibold rounded-lg transition-all whitespace-nowrap cursor-pointer shrink-0 ${
-                        activeTab === 'technology' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-200/70 hover:text-slate-900'
+                      className={`py-1.5 px-3 font-semibold rounded-xl transition-all whitespace-nowrap cursor-pointer shrink-0 ${
+                        activeTab === 'technology' ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-xs font-bold' : 'text-slate-600 hover:bg-slate-200/70 hover:text-slate-900'
                       }`}
                     >
-                      5. Technology
+                      ⚡ 5. Technology
                     </button>
                     <button
                       onClick={() => setActiveTab('signals')}
                       title="6. Signals & Hiring: Growth signals, open job positions, expansion announcements, and transformation initiatives."
-                      className={`py-1.5 px-3 font-semibold rounded-lg transition-all whitespace-nowrap cursor-pointer shrink-0 ${
-                        activeTab === 'signals' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-200/70 hover:text-slate-900'
+                      className={`py-1.5 px-3 font-semibold rounded-xl transition-all whitespace-nowrap cursor-pointer shrink-0 ${
+                        activeTab === 'signals' ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-xs font-bold' : 'text-slate-600 hover:bg-slate-200/70 hover:text-slate-900'
                       }`}
                     >
-                      6. Signals & Hiring
+                      📈 6. Signals & Hiring
                     </button>
                     <button
                       onClick={() => setActiveTab('evidence')}
                       title="7. Evidence & Sources: Transparent audit log of exact text snippets, source page URLs, confidence levels, and timestamps."
-                      className={`py-1.5 px-3 font-semibold rounded-lg transition-all whitespace-nowrap cursor-pointer shrink-0 ${
-                        activeTab === 'evidence' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-200/70 hover:text-slate-900'
+                      className={`py-1.5 px-3 font-semibold rounded-xl transition-all whitespace-nowrap cursor-pointer shrink-0 ${
+                        activeTab === 'evidence' ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-xs font-bold' : 'text-slate-600 hover:bg-slate-200/70 hover:text-slate-900'
                       }`}
                     >
-                      7. Evidence & Sources ({report.findings?.length || 0})
+                      🔍 7. Grounded Evidence ({report.findings?.length || 0})
                     </button>
                     <button
                       onClick={() => setActiveTab('opportunities')}
                       title="8. BPO Opportunities: Identified operational pain points mapped directly to our BPO and software automation services."
-                      className={`py-1.5 px-3 font-semibold rounded-lg transition-all whitespace-nowrap cursor-pointer shrink-0 ${
-                        activeTab === 'opportunities' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-200/70 hover:text-slate-900'
+                      className={`py-1.5 px-3 font-semibold rounded-xl transition-all whitespace-nowrap cursor-pointer shrink-0 ${
+                        activeTab === 'opportunities' ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-xs font-bold' : 'text-slate-600 hover:bg-slate-200/70 hover:text-slate-900'
                       }`}
                     >
-                      8. BPO Opportunities
+                      💡 8. BPO Opportunities
                     </button>
                     <button
                       onClick={() => setActiveTab('scoring')}
                       title="9. Scoring Breakdown: Complete explainable 100-point company fit score with category weights and mathematical formula."
-                      className={`py-1.5 px-3 font-semibold rounded-lg transition-all whitespace-nowrap cursor-pointer shrink-0 ${
-                        activeTab === 'scoring' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-200/70 hover:text-slate-900'
+                      className={`py-1.5 px-3 font-semibold rounded-xl transition-all whitespace-nowrap cursor-pointer shrink-0 ${
+                        activeTab === 'scoring' ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-xs font-bold' : 'text-slate-600 hover:bg-slate-200/70 hover:text-slate-900'
                       }`}
                     >
-                      9. Scoring Breakdown
+                      🧮 9. Scoring Breakdown
                     </button>
                     <button
                       onClick={() => setActiveTab('history_icp')}
                       title="10. Audit & ICP: Historical crawling job execution logs and side-by-side comparison against active ICP configuration."
-                      className={`py-1.5 px-3 font-semibold rounded-lg transition-all whitespace-nowrap cursor-pointer shrink-0 ${
-                        activeTab === 'history_icp' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-200/70 hover:text-slate-900'
+                      className={`py-1.5 px-3 font-semibold rounded-xl transition-all whitespace-nowrap cursor-pointer shrink-0 ${
+                        activeTab === 'history_icp' ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-xs font-bold' : 'text-slate-600 hover:bg-slate-200/70 hover:text-slate-900'
                       }`}
                     >
-                      10. Audit & ICP
+                      🛡️ 10. Audit & ICP
                     </button>
                   </div>
 
