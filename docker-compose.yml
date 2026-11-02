@@ -1,0 +1,110 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: merugu_bpo_postgres
+    restart: always
+    environment:
+      POSTGRES_DB: merugu_bpo_db
+      POSTGRES_USER: merugu_user
+      POSTGRES_PASSWORD: merugu_secure_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  redis:
+    image: redis:7-alpine
+    container_name: merugu_bpo_redis
+    restart: always
+    ports:
+      - "6379:6379"
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: merugu_bpo_backend
+    restart: always
+    command: >
+      sh -c "python manage.py migrate &&
+             python seed_data.py &&
+             python manage.py runserver 0.0.0.0:8000"
+    volumes:
+      - ./backend:/app
+    ports:
+      - "8000:8000"
+    environment:
+      - DEBUG=True
+      - SECRET_KEY=merugu-super-secret-key-prod-ai-bpo
+      - DB_ENGINE=django.db.backends.postgresql
+      - DB_NAME=merugu_bpo_db
+      - DB_USER=merugu_user
+      - DB_PASSWORD=merugu_secure_password
+      - DB_HOST=db
+      - DB_PORT=5432
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    depends_on:
+      - db
+      - redis
+
+  celery_worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: merugu_bpo_celery_worker
+    restart: always
+    command: celery -A merugu_bpo worker -l info
+    volumes:
+      - ./backend:/app
+    environment:
+      - DB_ENGINE=django.db.backends.postgresql
+      - DB_NAME=merugu_bpo_db
+      - DB_USER=merugu_user
+      - DB_PASSWORD=merugu_secure_password
+      - DB_HOST=db
+      - DB_PORT=5432
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    depends_on:
+      - backend
+      - redis
+
+  celery_beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: merugu_bpo_celery_beat
+    restart: always
+    command: celery -A merugu_bpo beat -l info
+    volumes:
+      - ./backend:/app
+    environment:
+      - DB_ENGINE=django.db.backends.postgresql
+      - DB_NAME=merugu_bpo_db
+      - DB_USER=merugu_user
+      - DB_PASSWORD=merugu_secure_password
+      - DB_HOST=db
+      - DB_PORT=5432
+      - CELERY_BROKER_URL=redis://redis:6379/0
+    depends_on:
+      - backend
+      - redis
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: merugu_bpo_frontend
+    restart: always
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:

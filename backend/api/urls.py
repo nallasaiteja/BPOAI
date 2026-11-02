@@ -1,0 +1,29 @@
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
+from .views import (
+    AuthViewSet, UserViewSet, LeadViewSet, CompanyViewSet,
+    ServiceCatalogueViewSet, BusinessRequirementViewSet, EmailDraftViewSet,
+    EmailAccountViewSet, EmailReplyViewSet, FollowUpScheduleViewSet,
+    ProposalViewSet, ProposalConfigViewSet, dashboard_analytics_view
+)
+
+router = DefaultRouter()
+router.register(r'auth', AuthViewSet, basename='auth')
+router.register(r'users', UserViewSet, basename='users')
+router.register(r'leads', LeadViewSet, basename='leads')
+router.register(r'companies', CompanyViewSet, basename='companies')
+router.register(r'services', ServiceCatalogueViewSet, basename='services')
+router.register(r'requirements', BusinessRequirementViewSet, basename='requirements')
+router.register(r'email-drafts', EmailDraftViewSet, basename='email-drafts')
+router.register(r'email-accounts', EmailAccountViewSet, basename='email-accounts')
+router.register(r'replies', EmailReplyViewSet, basename='replies')
+router.register(r'followups', FollowUpScheduleViewSet, basename='followups')
+router.register(r'proposals', ProposalViewSet, basename='proposals')
+router.register(r'proposal-config', ProposalConfigViewSet, basename='proposal-config')
+
+urlpatterns = [
+    path('auth/google/callback/', AuthViewSet.as_view({'get': 'google_callback'}), name='auth-google-callback-slash'),
+    path('auth/google_callback/', AuthViewSet.as_view({'get': 'google_callback'}), name='auth-google-callback-underscore'),
+    path('', include(router.urls)),
+    path('analytics/dashboard/', dashboard_analytics_view, name='dashboard-analytics'),
+]
