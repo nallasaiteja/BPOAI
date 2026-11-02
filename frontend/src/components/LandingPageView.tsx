@@ -198,29 +198,18 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({ onGoToPortal, 
         </nav>
 
         <div className="flex items-center gap-3">
-          {/* Demo Accounts Button */}
-          <button
-            onClick={() => setShowDemoModal(true)}
-            className="flex items-center gap-2 px-3.5 py-2 text-xs font-bold text-amber-300 hover:text-white bg-amber-950/50 hover:bg-amber-900/80 border border-amber-600/60 rounded-lg shadow-sm transition-all cursor-pointer"
-            title="Open Demo Accounts directory to log in as any role"
-          >
-            <Users className="w-4 h-4 text-amber-400" />
-            <span>Demo Accounts</span>
-            <span className="px-1.5 py-0.2 bg-amber-500 text-slate-950 text-[10px] font-bold rounded-full">9 Roles</span>
-          </button>
-
           {/* Open Staff Portal */}
           <button
             onClick={() => onGoToPortal()}
-            className="flex items-center gap-2 px-4 py-2 text-xs font-semibold text-slate-300 hover:text-white bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded-lg transition-all cursor-pointer"
+            className="flex items-center gap-2 px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-500 rounded-lg shadow-md shadow-blue-600/30 transition-all cursor-pointer"
           >
-            <ShieldCheck className="w-4 h-4 text-blue-400" />
-            <span className="hidden sm:inline">Staff Portal</span>
+            <ShieldCheck className="w-4 h-4 text-blue-200" />
+            <span>Staff Portal</span>
           </button>
 
           <a
             href="#contact"
-            className="hidden lg:flex items-center gap-2 px-4 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-500 rounded-lg shadow-md shadow-blue-600/30 transition-all"
+            className="hidden lg:flex items-center gap-2 px-4 py-2 text-xs font-semibold text-slate-300 hover:text-white bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded-lg transition-all"
           >
             <span>Request Demo</span>
             <ArrowRight className="w-3.5 h-3.5" />
@@ -244,29 +233,21 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({ onGoToPortal, 
         </p>
 
         <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
-          {/* Main Call to Action: Demo Accounts */}
           <button
-            onClick={() => setShowDemoModal(true)}
-            className="px-6 py-3.5 text-sm font-bold text-slate-950 bg-gradient-to-r from-amber-400 to-amber-300 hover:from-amber-300 hover:to-amber-200 rounded-xl shadow-lg shadow-amber-500/20 transition-all flex items-center gap-2.5 cursor-pointer transform hover:-translate-y-0.5"
+            onClick={() => onGoToPortal()}
+            className="px-6 py-3.5 text-sm font-bold text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 rounded-xl shadow-lg shadow-blue-600/30 transition-all flex items-center gap-2.5 cursor-pointer transform hover:-translate-y-0.5"
           >
-            <Users className="w-4 h-4 text-slate-950" />
-            <span>Explore 9 Demo Accounts & Roles</span>
-            <ArrowRight className="w-4 h-4 text-slate-950" />
+            <ShieldCheck className="w-4 h-4 text-blue-200" />
+            <span>Enter Staff Operations Portal</span>
+            <ArrowRight className="w-4 h-4 text-white" />
           </button>
 
           <a
             href="#contact"
-            className="px-6 py-3.5 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-500 rounded-xl shadow-lg shadow-blue-600/30 transition-all flex items-center gap-2"
+            className="px-6 py-3.5 text-sm font-semibold text-slate-300 hover:text-white bg-slate-900/80 hover:bg-slate-800 border border-slate-800 rounded-xl transition-all flex items-center gap-2"
           >
             <span>Request Proposal Blueprint</span>
           </a>
-
-          <button
-            onClick={() => onGoToPortal()}
-            className="px-6 py-3.5 text-sm font-semibold text-slate-300 hover:text-white bg-slate-900/80 hover:bg-slate-800 border border-slate-800 rounded-xl transition-all cursor-pointer"
-          >
-            Staff Operations Portal
-          </button>
         </div>
 
         {/* Metric Badges */}
@@ -532,7 +513,6 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({ onGoToPortal, 
           <span className="block mt-0.5">Corporate Headquarters • Global BPO Operations Desk • meruguglobal.com</span>
         </div>
         <div className="flex items-center gap-6">
-          <button onClick={() => setShowDemoModal(true)} className="text-amber-400 hover:underline cursor-pointer">Demo Accounts Directory</button>
           <button onClick={() => onGoToPortal()} className="text-blue-400 hover:underline cursor-pointer">Staff Operations Portal</button>
           <span>Privacy Policy</span>
           <span>Terms of Service</span>
