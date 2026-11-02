@@ -27,6 +27,64 @@ class LeadIngestionService:
         return str(val).strip()
 
     @staticmethod
+    def _row_to_smart_dict(row_cells: list) -> Dict[str, Any]:
+        """
+        Classifies cells in a headerless row by content pattern:
+        detects Email, Phone Number, Designation, and Company Name.
+        """
+        import re
+        item = {}
+        email = None
+        phone = None
+        designation = None
+        website = None
+        remaining = []
+
+        DESIGNATION_TERMS = [
+            'ceo', 'founder', 'co-founder', 'director', 'partner', 'head', 
+            'president', 'manager', 'lead', 'chief', 'officer', 'md', 
+            'executive', 'vp', 'chairman', 'proprietor', 'owner'
+        ]
+
+        for cell in row_cells:
+            val = str(cell or '').strip()
+            if not val:
+                continue
+
+            # Check email
+            if not email and re.search(r'[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+', val):
+                match = re.search(r'[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+', val)
+                if match:
+                    email = match.group(0)
+            # Check website
+            elif not website and (val.startswith(('http://', 'https://', 'www.')) or re.search(r'\.[a-z]{2,6}(\/.*)?$', val.lower())):
+                website = val
+            # Check phone number (mostly digits, +, parentheses, spaces)
+            elif not phone and re.search(r'^\+?[\d\s\-().]{7,20}$', val) and len(re.sub(r'\D', '', val)) >= 7:
+                phone = val
+            # Check designation / title
+            elif not designation and any(term in val.lower().split() or term in val.lower() for term in DESIGNATION_TERMS):
+                designation = val
+            else:
+                remaining.append(val)
+
+        if email:
+            item['business_email'] = email
+        if phone:
+            item['contact_number'] = phone
+        if designation:
+            item['designation'] = designation
+        if website:
+            item['website_url'] = website
+
+        if remaining:
+            item['company_name'] = remaining[0]
+            if len(remaining) > 1:
+                item['contact_person'] = remaining[1]
+
+        return item
+
+    @staticmethod
     def parse_csv(file_obj) -> List[Dict[str, Any]]:
         import re
         decoded = file_obj.read().decode('utf-8', errors='ignore')
@@ -35,11 +93,23 @@ class LeadIngestionService:
         if not all_rows:
             return []
 
-        # Find the header row (row containing keywords or largest non-empty count)
+        # Check if row 0 is actually data (contains an @ email address or phone)
+        row0_str = " ".join([str(c or '') for c in all_rows[0]]).lower()
+        is_headerless = ('@' in row0_str) or not any(k in row0_str for k in ['company', 'email', 'name', 'lead', 'phone', 'contact', 'designation', 'organization'])
+
+        if is_headerless:
+            leads = []
+            for row in all_rows:
+                lead_dict = LeadIngestionService._row_to_smart_dict(row)
+                if lead_dict:
+                    leads.append(lead_dict)
+            return leads
+
+        # Find the header row (first row with keywords)
         header_idx = 0
         for i, row in enumerate(all_rows[:5]):
-            row_str = " ".join(row).lower()
-            if any(k in row_str for k in ['company', 'email', 'name', 'lead', 'phone', 'contact']):
+            r_str = " ".join(row).lower()
+            if any(k in r_str for k in ['company', 'email', 'name', 'lead', 'phone', 'contact', 'designation']):
                 header_idx = i
                 break
 
@@ -65,11 +135,23 @@ class LeadIngestionService:
         if not all_rows:
             return []
 
-        # Find the header row (row containing keywords or first non-empty row)
+        # Check if row 0 is actually data (contains an @ email address or lacks keywords)
+        row0_str = " ".join([str(c or '') for c in all_rows[0]]).lower()
+        is_headerless = ('@' in row0_str) or not any(k in row0_str for k in ['company', 'email', 'name', 'lead', 'phone', 'contact', 'designation', 'organization'])
+
+        if is_headerless:
+            leads = []
+            for row in all_rows:
+                lead_dict = LeadIngestionService._row_to_smart_dict(row)
+                if lead_dict:
+                    leads.append(lead_dict)
+            return leads
+
+        # Find the header row
         header_idx = 0
         for i, row in enumerate(all_rows[:5]):
-            row_str = " ".join([str(c or '') for c in row]).lower()
-            if any(k in row_str for k in ['company', 'email', 'name', 'lead', 'phone', 'contact']):
+            r_str = " ".join([str(c or '') for c in row]).lower()
+            if any(k in r_str for k in ['company', 'email', 'name', 'lead', 'phone', 'contact', 'designation']):
                 header_idx = i
                 break
 
