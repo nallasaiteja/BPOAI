@@ -26,6 +26,7 @@ interface ProposalsViewProps {
   onApprove: (id: string) => Promise<void>;
   onDeleteLead?: (leadId: string) => Promise<void>;
   onUpdateQuotation?: (proposalId: string, data: any) => Promise<void>;
+  onDeleteAll?: () => Promise<void>;
 }
 
 interface EditableLineItem {
@@ -40,7 +41,8 @@ export const ProposalsView: React.FC<ProposalsViewProps> = ({
   services = [],
   onApprove,
   onDeleteLead,
-  onUpdateQuotation
+  onUpdateQuotation,
+  onDeleteAll
 }) => {
   const [selectedProposalId, setSelectedProposalId] = useState<string>(proposals[0]?.id || '');
   const activeProposal = proposals.find(p => p.id === selectedProposalId) || proposals[0];
@@ -254,9 +256,21 @@ export const ProposalsView: React.FC<ProposalsViewProps> = ({
           <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
             Proposals & Quotes ({proposals.length})
           </h3>
-          <span className="text-[10px] font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
-            Agent 9 • INR (₹)
-          </span>
+          <div className="flex items-center gap-2">
+            {proposals.length > 0 && onDeleteAll && (
+              <button
+                onClick={onDeleteAll}
+                className="text-[11px] text-rose-600 hover:text-rose-700 font-semibold flex items-center gap-1 bg-rose-50 hover:bg-rose-100 px-2 py-0.5 rounded cursor-pointer transition-colors"
+                title="Delete all leads & clear proposals"
+              >
+                <Trash2 className="w-3 h-3" />
+                <span>Delete All</span>
+              </button>
+            )}
+            <span className="text-[10px] font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
+              Agent 9 • INR (₹)
+            </span>
+          </div>
         </div>
 
         <div className="space-y-2 max-h-[700px] overflow-y-auto">

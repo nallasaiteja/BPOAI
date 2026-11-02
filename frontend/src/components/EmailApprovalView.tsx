@@ -11,9 +11,10 @@ interface EmailApprovalViewProps {
   onApprove: (draftId: string) => Promise<void>;
   onReject: (draftId: string, notes?: string) => Promise<void>;
   onDeleteLead?: (leadId: string) => Promise<void>;
+  onDeleteAll?: () => Promise<void>;
 }
 
-export const EmailApprovalView: React.FC<EmailApprovalViewProps> = ({ drafts, onApprove, onReject, onDeleteLead }) => {
+export const EmailApprovalView: React.FC<EmailApprovalViewProps> = ({ drafts, onApprove, onReject, onDeleteLead, onDeleteAll }) => {
   const activeDrafts = drafts.filter(d => !d.status || d.status === 'AWAITING_APPROVAL' || d.status === 'DRAFT');
   const [selectedDraftId, setSelectedDraftId] = useState<string>(activeDrafts[0]?.id || '');
   const [isProcessing, setIsProcessing] = useState(false);
@@ -69,9 +70,21 @@ export const EmailApprovalView: React.FC<EmailApprovalViewProps> = ({ drafts, on
               Outreach Approval Queue ({activeDrafts.length})
             </h3>
           </div>
-          <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded">
-            Human-in-the-Loop
-          </span>
+          <div className="flex items-center gap-2">
+            {drafts.length > 0 && onDeleteAll && (
+              <button
+                onClick={onDeleteAll}
+                className="text-[11px] text-rose-600 hover:text-rose-700 font-semibold flex items-center gap-1 bg-rose-50 hover:bg-rose-100 px-2 py-0.5 rounded cursor-pointer transition-colors"
+                title="Delete all leads & clear approval queue"
+              >
+                <Trash2 className="w-3 h-3" />
+                <span>Delete All</span>
+              </button>
+            )}
+            <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded">
+              Human-in-the-Loop
+            </span>
+          </div>
         </div>
 
         <div className="space-y-2 max-h-[700px] overflow-y-auto">

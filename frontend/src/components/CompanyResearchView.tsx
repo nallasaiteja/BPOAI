@@ -9,9 +9,10 @@ interface CompanyResearchViewProps {
   leads: Lead[];
   onTriggerResearch: (leadId: string) => Promise<void>;
   onDeleteLead?: (leadId: string) => Promise<void>;
+  onDeleteAll?: () => Promise<void>;
 }
 
-export const CompanyResearchView: React.FC<CompanyResearchViewProps> = ({ leads, onTriggerResearch, onDeleteLead }) => {
+export const CompanyResearchView: React.FC<CompanyResearchViewProps> = ({ leads, onTriggerResearch, onDeleteLead, onDeleteAll }) => {
   const [isProcessing, setIsProcessing] = useState(false);
   const researchedLeads = leads.filter(l => l.research_report);
   const [selectedLeadId, setSelectedLeadId] = useState<string>(
@@ -44,9 +45,21 @@ export const CompanyResearchView: React.FC<CompanyResearchViewProps> = ({ leads,
           <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
             Researched Entities ({researchedLeads.length})
           </h3>
-          <span className="text-[11px] text-blue-600 font-semibold bg-blue-50 px-2 py-0.5 rounded">
-            Agent 3 & 4
-          </span>
+          <div className="flex items-center gap-2">
+            {leads.length > 0 && onDeleteAll && (
+              <button
+                onClick={onDeleteAll}
+                className="text-[11px] text-rose-600 hover:text-rose-700 font-semibold flex items-center gap-1 bg-rose-50 hover:bg-rose-100 px-2 py-0.5 rounded cursor-pointer transition-colors"
+                title="Delete all leads and research data"
+              >
+                <Trash2 className="w-3 h-3" />
+                <span>Delete All</span>
+              </button>
+            )}
+            <span className="text-[11px] text-blue-600 font-semibold bg-blue-50 px-2 py-0.5 rounded">
+              Agent 3 & 4
+            </span>
+          </div>
         </div>
 
         <div className="space-y-1.5 max-h-[750px] overflow-y-auto">

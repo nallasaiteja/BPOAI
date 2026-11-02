@@ -361,6 +361,31 @@ class LeadViewSet(viewsets.ModelViewSet):
         except Exception as e:
             return Response({'error': f'Failed to parse file: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
 
+    @action(detail=False, methods=['delete', 'post'])
+    def delete_all(self, request):
+        """
+        Deletes all leads and all associated pipeline data across all sections.
+        """
+        from research.models import Company, CompanyResearchReport
+        from communications.models import EmailDraft, SentEmail, EmailReply, FollowUpSchedule
+        from proposals.models import Proposal, Quotation
+        from requirements_ai.models import BusinessRequirement, LeadScore
+
+        lead_count = Lead.objects.count()
+        Lead.objects.all().delete()
+        Company.objects.all().delete()
+        EmailDraft.objects.all().delete()
+        Proposal.objects.all().delete()
+        Quotation.objects.all().delete()
+        BusinessRequirement.objects.all().delete()
+        CompanyResearchReport.objects.all().delete()
+
+        return Response({
+            'success': True,
+            'deleted_count': lead_count,
+            'message': f"Successfully deleted all {lead_count} leads and all associated data across all sections."
+        }, status=status.HTTP_200_OK)
+
     @action(detail=True, methods=['post'])
     def process(self, request, pk=None):
         """

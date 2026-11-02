@@ -245,6 +245,42 @@ export const App: React.FC = () => {
     }
   };
 
+  const handleDeleteAllLeads = async () => {
+    if (!window.confirm('Are you sure you want to delete ALL leads? This will permanently wipe all leads, research reports, generated requirements, email drafts, and proposals across the entire system.')) {
+      return;
+    }
+    setLeads([]);
+    setEmailDrafts([]);
+    setProposals([]);
+    setKpis({
+      total_leads: 0,
+      verified_companies: 0,
+      unverified_companies: 0,
+      websites_discovered: 0,
+      requirements_identified: 0,
+      hot_leads: 0,
+      warm_leads: 0,
+      cold_leads: 0,
+      emails_generated: 0,
+      emails_awaiting_approval: 0,
+      emails_sent: 0,
+      replies_received: 0,
+      positive_responses: 0,
+      meetings_requested: 0,
+      quotations_generated: 0,
+      converted_customers: 0,
+      followups_pending: 0,
+    });
+
+    try {
+      const res: any = await api.deleteAllLeads();
+      showToast(res?.message || 'Successfully deleted all leads across all sections.');
+      await loadData();
+    } catch (err: any) {
+      showToast(`Delete failed: ${err?.message || 'Could not delete leads.'}`);
+    }
+  };
+
   const handleApproveEmail = async (draftId: string) => {
     try {
       if (draftId.startsWith('draft-')) {
@@ -387,6 +423,7 @@ export const App: React.FC = () => {
               kpis={kpis}
               insights={insights}
               onNavigate={setCurrentTab}
+              onDeleteAll={handleDeleteAllLeads}
             />
           )}
 
@@ -398,6 +435,7 @@ export const App: React.FC = () => {
               onVerifyManually={handleVerifyManually}
               onCreateLead={handleCreateLead}
               onDeleteLead={handleDeleteLead}
+              onDeleteAll={handleDeleteAllLeads}
             />
           )}
 
@@ -406,6 +444,7 @@ export const App: React.FC = () => {
               leads={leads}
               onTriggerResearch={handleTriggerPipeline}
               onDeleteLead={handleDeleteLead}
+              onDeleteAll={handleDeleteAllLeads}
             />
           )}
 
@@ -415,6 +454,7 @@ export const App: React.FC = () => {
               onApprove={handleApproveEmail}
               onReject={handleRejectEmail}
               onDeleteLead={handleDeleteLead}
+              onDeleteAll={handleDeleteAllLeads}
             />
           )}
 
@@ -425,6 +465,7 @@ export const App: React.FC = () => {
               onApprove={handleApproveProposal}
               onDeleteLead={handleDeleteLead}
               onUpdateQuotation={handleUpdateQuotation}
+              onDeleteAll={handleDeleteAllLeads}
             />
           )}
 
@@ -441,6 +482,7 @@ export const App: React.FC = () => {
                 showToast(`Switched active user to ${newUser.first_name} ${newUser.last_name} (${newUser.role})`);
                 loadData();
               }}
+              onDeleteAll={handleDeleteAllLeads}
             />
           )}
         </main>

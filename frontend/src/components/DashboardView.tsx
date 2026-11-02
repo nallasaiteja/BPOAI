@@ -2,7 +2,7 @@ import React from 'react';
 import { 
   Users, Building2, Globe, Flame, Mail, Clock, Send, 
   MessageSquare, CalendarCheck, FileCheck, DollarSign,
-  TrendingUp, CheckCircle, AlertCircle, Sparkles, ArrowRight
+  TrendingUp, CheckCircle, AlertCircle, Sparkles, ArrowRight, Trash2
 } from 'lucide-react';
 import { DashboardKPIs, ExecutiveInsights } from '../types';
 
@@ -10,9 +10,10 @@ interface DashboardViewProps {
   kpis: DashboardKPIs;
   insights: ExecutiveInsights;
   onNavigate: (tab: string) => void;
+  onDeleteAll?: () => Promise<void>;
 }
 
-export const DashboardView: React.FC<DashboardViewProps> = ({ kpis, insights, onNavigate }) => {
+export const DashboardView: React.FC<DashboardViewProps> = ({ kpis, insights, onNavigate, onDeleteAll }) => {
   const metricCards = [
     { label: 'Total Ingested Leads', value: kpis.total_leads, icon: Users, color: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-100' },
     { label: 'Verified Companies', value: kpis.verified_companies, icon: Building2, color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-100' },
@@ -62,6 +63,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ kpis, insights, on
           >
             <span>Approval Queue ({kpis.emails_awaiting_approval})</span>
           </button>
+          {kpis.total_leads > 0 && onDeleteAll && (
+            <button
+              onClick={onDeleteAll}
+              className="px-3.5 py-2 bg-rose-950/60 hover:bg-rose-900 text-rose-300 border border-rose-800/80 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer"
+              title="Permanently wipe all leads & pipeline data"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Delete All Data</span>
+            </button>
+          )}
         </div>
       </div>
 

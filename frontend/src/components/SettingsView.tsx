@@ -2,15 +2,16 @@ import React, { useState, useEffect } from 'react';
 import { 
   ShieldCheck, Lock, Mail, Cpu, Server, CheckCircle2, 
   AlertTriangle, Users, Bot, Sliders, ExternalLink, RefreshCw, LogOut,
-  Sparkles, Key, UserCheck, ArrowRightLeft, Shield
+  Sparkles, Key, UserCheck, ArrowRightLeft, Shield, Trash2
 } from 'lucide-react';
 import { api } from '../services/api';
 
 interface SettingsViewProps {
   onUserSwitched?: (user: any) => void;
+  onDeleteAll?: () => Promise<void>;
 }
 
-export const SettingsView: React.FC<SettingsViewProps> = ({ onUserSwitched }) => {
+export const SettingsView: React.FC<SettingsViewProps> = ({ onUserSwitched, onDeleteAll }) => {
   const [googleStatus, setGoogleStatus] = useState<{ configured: boolean; connected: boolean; email?: string | null; sender_name?: string; client_id?: string }>({
     configured: false,
     connected: false,
@@ -577,6 +578,30 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onUserSwitched }) =>
           </div>
         </div>
       </div>
+
+      {/* Danger Zone: Data Management */}
+      {onDeleteAll && (
+        <div className="bg-rose-50/60 rounded-xl border border-rose-200 p-5 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <Trash2 className="w-4 h-4 text-rose-600" />
+                <h3 className="text-sm font-bold text-rose-900">Data Management & Reset</h3>
+              </div>
+              <p className="text-xs text-rose-700">
+                Permanently purge all leads, company research reports, detected requirements, email drafts, and proposals across the entire system.
+              </p>
+            </div>
+            <button
+              onClick={onDeleteAll}
+              className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-semibold shadow-sm transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Delete All Leads & Data</span>
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

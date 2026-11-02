@@ -159,6 +159,12 @@ class ApiService {
     });
   }
 
+  async deleteAllLeads(): Promise<any> {
+    return this.request('/leads/delete_all/', {
+      method: 'POST',
+    });
+  }
+
   async triggerLeadPipeline(leadId: string): Promise<any> {
     return this.request(`/leads/${leadId}/process/`, {
       method: 'POST',
