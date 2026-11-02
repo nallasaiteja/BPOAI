@@ -3,6 +3,7 @@ services:
   - type: web
     name: merugu-bpo-backend
     runtime: python
+    plan: free
     rootDir: backend
     buildCommand: chmod +x build.sh && ./build.sh
     startCommand: gunicorn merugu_bpo.wsgi:application
