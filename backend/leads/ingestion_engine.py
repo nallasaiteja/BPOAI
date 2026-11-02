@@ -735,11 +735,21 @@ class IntelligentIngestionEngine:
                 lead.save()
                 created_leads.append(lead)
 
-                # Trigger domain intelligence asynchronously/in-process
+                # Trigger domain intelligence in-process to set verification score & initial lead score
                 try:
                     EmailDomainIntelligenceService.analyze_lead_domain(lead)
                 except Exception as e:
                     logger.warning(f"Domain analysis failed for lead {lead.id}: {e}")
+
+        # Automatically start website crawling, research, and outreach preparation in the background for all verified leads
+        verified_lead_ids = [str(l.id) for l in created_leads if l.is_company_verified]
+        if verified_lead_ids:
+            import threading
+            threading.Thread(
+                target=cls.process_verified_leads_to_outreach,
+                args=(verified_lead_ids,),
+                daemon=True
+            ).start()
 
         return {
             'batch_id': str(batch.id),
@@ -750,6 +760,47 @@ class IntelligentIngestionEngine:
             'invalid_count': batch.invalid_count,
             'message': f"Successfully committed import: {len(created_leads)} leads saved, {len(rejection_report)} rejected."
         }
+
+    @classmethod
+    def process_verified_leads_to_outreach(cls, lead_ids: List[str]) -> None:
+        """
+        Background worker that processes verified leads:
+        Crawls company website using fast deterministic engine ($0 AI cost),
+        extracts structured intelligence, identifies BPO requirements,
+        generates personalized email draft & proposal,
+        and transitions the lead to AWAITING_APPROVAL for the email outreach queue.
+        """
+        from .models import Lead, LeadStatus
+        from research.services import CompanyResearchService
+        from requirements_ai.services import RequirementAnalysisService
+        from email_engine.services import EmailDraftingService
+
+        for lead_id in lead_ids:
+            try:
+                lead = Lead.objects.filter(id=lead_id).first()
+                if not lead or not lead.is_company_verified:
+                    continue
+
+                # 1. Controlled website crawling and evidence extraction (Fast, deterministic, $0 cost)
+                report, _ = CompanyResearchService.initialize_and_run(lead_id=str(lead.id), force_refresh=False)
+
+                # 2. Extract requirements
+                RequirementAnalysisService.analyze_requirements_for_lead(lead)
+
+                # 3. Generate tailored outreach email draft & proposal
+                EmailDraftingService.generate_draft_for_lead(lead)
+
+                # 4. Mark report approved and advance lead to outreach queue
+                if report:
+                    report.human_review_status = 'APPROVED'
+                    report.save()
+
+                lead.lead_status = LeadStatus.AWAITING_APPROVAL
+                lead.is_email_generated = True
+                lead.save()
+                logger.info(f"Auto-processed verified lead {lead.company_name} to email outreach.")
+            except Exception as e:
+                logger.error(f"Error auto-processing verified lead {lead_id}: {e}")
 
 
 import json

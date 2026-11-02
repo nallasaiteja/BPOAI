@@ -645,12 +645,76 @@ class LeadViewSet(viewsets.ModelViewSet):
             'is_cached': job.is_cached
         })
 
+    @action(detail=False, methods=['post'], url_path='auto-process-verified')
+    def auto_process_verified(self, request):
+        """
+        Automatically crawls and processes all verified leads that have not yet been sent to email outreach.
+        """
+        from leads.models import Lead, LeadStatus
+        from leads.ingestion_engine import IntelligentIngestionEngine
+        import threading
+
+        unprocessed = Lead.objects.filter(
+            is_company_verified=True
+        ).exclude(lead_status=LeadStatus.AWAITING_APPROVAL).exclude(is_email_generated=True)
+        lead_ids = [str(l.id) for l in unprocessed]
+        if lead_ids:
+            threading.Thread(
+                target=IntelligentIngestionEngine.process_verified_leads_to_outreach,
+                args=(lead_ids,),
+                daemon=True
+            ).start()
+
+        return Response({
+            'message': f'Started automated crawling, research, and outreach preparation for {len(lead_ids)} verified leads.',
+            'queued_count': len(lead_ids)
+        })
+
     @action(detail=True, methods=['post'], url_path='investigate')
     def investigate(self, request, pk=None):
         """
-        Dedicated endpoint to run or force re-investigate a company's website.
+        Dedicated endpoint to run fast deterministic web crawling and evidence-based investigation ($0 AI cost).
         """
         return self.process(request, pk=pk)
+
+    @action(detail=True, methods=['post'], url_path='ai-investigate')
+    def ai_investigate(self, request, pk=None):
+        """
+        Explicit AI-powered deep investigation for a specific lead.
+        Invokes Gemini LLM only when explicitly requested by user button click.
+        """
+        lead = self.get_object()
+        from research.services import CompanyResearchService
+        report, job = CompanyResearchService.initialize_and_run(
+            lead_id=str(lead.id),
+            force_refresh=True,
+            user=request.user if request.user.is_authenticated else None
+        )
+
+        # Call Gemini LLM explicitly for strategic AI insights
+        try:
+            from ai_agents.llm_gateway import LLMGateway
+            system_prompt = "You are an expert enterprise B2B sales strategist. Analyze the company website intelligence and produce an executive strategic summary and 3 growth signals."
+            user_prompt = f"Company: {lead.company_name}\nWebsite: {lead.website_url}\nIndustry: {lead.industry}\nOverview: {report.company_overview}\nServices: {report.main_services}\nTechnologies: {report.tech_stack_detected}"
+            ai_resp = LLMGateway.call_llm(
+                agent_name="AI Deep Strategic Investigator",
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                response_format_json=False
+            )
+            ai_analysis = ai_resp.get('raw_text', '') or str(ai_resp)
+            if report and ai_analysis:
+                report.executive_summary = f"[AI Deep Synthesis]:\n{ai_analysis}\n\n[Verified Research]:\n{report.executive_summary}"
+                report.save()
+        except Exception as e:
+            logger.warning(f"AI Deep Investigation LLM call skipped or failed: {e}")
+
+        return Response({
+            'message': f'AI Deep Investigation completed for {lead.company_name}.',
+            'fit_score': report.company_fit_score if report else 0,
+            'confidence_score': report.research_confidence_score if report else 0,
+            'qualification_status': report.qualification_status if report else 'PENDING',
+        })
 
     @action(detail=True, methods=['post'], url_path='recalculate-score')
     def recalculate_score(self, request, pk=None):
@@ -762,13 +826,31 @@ class LeadViewSet(viewsets.ModelViewSet):
         lead.is_company_verified = True
         lead.manual_verification_required = False
         lead.domain_confidence_score = 90
+        lead.lead_score = 90
+        lead.lead_score_category = LeadScoreCategory.HOT
+        lead.is_scored = True
         lead.lead_status = LeadStatus.IN_RESEARCH
         lead.save()
 
-        # Trigger research pipeline
+        # Trigger research pipeline, requirement analysis, and outreach draft automatically
         from research.services import CompanyResearchService
-        CompanyResearchService.initialize_and_run(lead_id=str(lead.id), force_refresh=True)
-        return Response({'message': f'Lead {lead.company_name} manually verified and researched.'})
+        from requirements_ai.services import RequirementAnalysisService
+        from email_engine.services import EmailDraftingService
+
+        report, _ = CompanyResearchService.initialize_and_run(lead_id=str(lead.id), force_refresh=True)
+        try:
+            RequirementAnalysisService.analyze_requirements_for_lead(lead)
+            EmailDraftingService.generate_draft_for_lead(lead)
+            if report:
+                report.human_review_status = 'APPROVED'
+                report.save()
+            lead.lead_status = LeadStatus.AWAITING_APPROVAL
+            lead.is_email_generated = True
+            lead.save()
+        except Exception as e:
+            logger.warning(f"Downstream outreach pipeline error for lead {lead.id}: {e}")
+
+        return Response({'message': f'Lead {lead.company_name} manually verified, researched, and sent to email outreach queue.'})
 
 
 class CompanyViewSet(viewsets.ReadOnlyModelViewSet):

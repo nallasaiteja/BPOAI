@@ -4,7 +4,7 @@ import {
   ExternalLink, Layers, Search, Cpu, Target, Flag, Bug, Loader2, Trash2,
   RefreshCw, Sparkles, ShieldAlert, Award, FileText, Check, HelpCircle,
   XCircle, ChevronRight, Sliders, ArrowUpRight, Clock, Users, DollarSign,
-  Briefcase, Compass, FileCheck, ThumbsUp, ThumbsDown, Mail
+  Briefcase, Compass, FileCheck, ThumbsUp, ThumbsDown, Mail, Brain, Zap
 } from 'lucide-react';
 import { Lead, ResearchReport, ICPConfig, ResearchJob } from '../types';
 import { api } from '../services/api';
@@ -45,6 +45,8 @@ export const CompanyResearchView: React.FC<CompanyResearchViewProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [isInvestigating, setIsInvestigating] = useState(false);
+  const [isAiInvestigating, setIsAiInvestigating] = useState(false);
+  const [isAutoProcessing, setIsAutoProcessing] = useState(false);
   const [isRecalculating, setIsRecalculating] = useState(false);
   const [isReviewing, setIsReviewing] = useState(false);
 
@@ -66,8 +68,27 @@ export const CompanyResearchView: React.FC<CompanyResearchViewProps> = ({
     }
   }, [leads, selectedLeadId]);
 
+  // Auto-process any verified leads into the outreach queue automatically
+  useEffect(() => {
+    const verifiedUnprocessed = leads.filter(
+      l => l.is_company_verified && l.lead_status !== 'AWAITING_APPROVAL' && !l.is_email_generated
+    );
+    if (verifiedUnprocessed.length > 0 && !isAutoProcessing) {
+      api.autoProcessVerifiedLeads()
+        .then(() => {
+          // background processing spawned
+        })
+        .catch(() => null);
+    }
+  }, [leads.length]);
+
   const activeLead = leads.find(l => l.id === selectedLeadId);
   const report: ResearchReport | undefined = activeLead?.research_report;
+
+  // Count verified leads pending automated crawling & outreach drafting
+  const verifiedPendingOutreach = leads.filter(
+    l => l.is_company_verified && l.lead_status !== 'AWAITING_APPROVAL' && !l.is_email_generated
+  ).length;
 
   // Filtered Leads Directory
   const filteredLeads = leads.filter((lead) => {
@@ -109,6 +130,36 @@ export const CompanyResearchView: React.FC<CompanyResearchViewProps> = ({
       alert('Investigation error: ' + (err?.message || 'Failed to crawl website'));
     } finally {
       setIsInvestigating(false);
+    }
+  };
+
+  const handleAiInvestigate = async (leadId: string) => {
+    setIsAiInvestigating(true);
+    try {
+      const res = await api.aiInvestigateCompany(leadId);
+      if (showToast) {
+        showToast(res?.message || 'AI Deep Strategic Investigation completed.');
+      }
+      if (onRefresh) await onRefresh();
+    } catch (err: any) {
+      alert('AI Investigation error: ' + (err?.message || 'Failed to complete AI analysis'));
+    } finally {
+      setIsAiInvestigating(false);
+    }
+  };
+
+  const handleAutoProcessVerified = async () => {
+    setIsAutoProcessing(true);
+    try {
+      const res = await api.autoProcessVerifiedLeads();
+      if (showToast) {
+        showToast(res?.message || 'Started automated processing for verified leads.');
+      }
+      if (onRefresh) await onRefresh();
+    } catch (err: any) {
+      alert('Error triggering auto-processing: ' + (err?.message || 'Failed'));
+    } finally {
+      setIsAutoProcessing(false);
     }
   };
 
@@ -312,6 +363,48 @@ export const CompanyResearchView: React.FC<CompanyResearchViewProps> = ({
         </div>
       </div>
 
+      {/* Automated Pipeline Notification Banner */}
+      {verifiedPendingOutreach > 0 && (
+        <div className="mb-4 px-4 py-3 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl flex flex-wrap items-center justify-between gap-3 text-xs text-blue-900 shadow-2xs">
+          <div className="flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded-lg bg-blue-600 text-white flex items-center justify-center shrink-0">
+              <Zap className="w-4 h-4" />
+            </div>
+            <div>
+              <span className="font-bold text-slate-800">Automated Pipeline Active:</span>{' '}
+              <span>{verifiedPendingOutreach} verified lead(s) are being crawled and pushed to Email Outreach automatically.</span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleAutoProcessVerified}
+              disabled={isAutoProcessing}
+              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow-2xs flex items-center gap-1.5 transition-colors disabled:opacity-50"
+            >
+              {isAutoProcessing ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>Processing Queue...</span>
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>Sync Outreach Queue</span>
+                </>
+              )}
+            </button>
+            {onNavigate && (
+              <button
+                onClick={() => onNavigate('approvals')}
+                className="px-3 py-1.5 bg-white hover:bg-slate-50 text-blue-700 border border-blue-300 font-semibold rounded-lg shadow-2xs flex items-center gap-1 transition-colors"
+              >
+                <span>View Email Outreach &rarr;</span>
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* SECTION 3: Main Split Workspace */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
         
@@ -448,17 +541,37 @@ export const CompanyResearchView: React.FC<CompanyResearchViewProps> = ({
                       <button
                         onClick={() => handleInvestigate(activeLead.id, !!report)}
                         disabled={isInvestigating}
-                        className="px-3 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-500 rounded-lg shadow-xs flex items-center gap-1.5 transition-colors disabled:opacity-50"
+                        className="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 rounded-lg shadow-2xs flex items-center gap-1.5 transition-colors disabled:opacity-50"
+                        title="Fast, deterministic website crawling & structured fact extraction ($0 AI cost)"
                       >
                         {isInvestigating ? (
                           <>
-                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            <span>Investigating...</span>
+                            <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-600" />
+                            <span>Crawling Site...</span>
                           </>
                         ) : (
                           <>
-                            <Sparkles className="w-3.5 h-3.5" />
-                            <span>{report ? 'Re-investigate' : 'Investigate Site'}</span>
+                            <Globe className="w-3.5 h-3.5 text-slate-500" />
+                            <span>{report ? 'Re-crawl Site' : 'Crawl Site (Free)'}</span>
+                          </>
+                        )}
+                      </button>
+
+                      <button
+                        onClick={() => handleAiInvestigate(activeLead.id)}
+                        disabled={isAiInvestigating}
+                        className="px-3 py-1.5 text-xs font-semibold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-lg shadow-2xs flex items-center gap-1.5 transition-colors disabled:opacity-50"
+                        title="Explicit on-demand AI deep investigation using Gemini LLM for this specific lead"
+                      >
+                        {isAiInvestigating ? (
+                          <>
+                            <Loader2 className="w-3.5 h-3.5 animate-spin text-purple-600" />
+                            <span>AI Analyzing...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Brain className="w-3.5 h-3.5 text-purple-600" />
+                            <span>AI Investigate</span>
                           </>
                         )}
                       </button>

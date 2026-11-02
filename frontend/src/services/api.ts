@@ -256,6 +256,18 @@ class ApiService {
     });
   }
 
+  async aiInvestigateCompany(leadId: string): Promise<any> {
+    return this.request(`/leads/${leadId}/ai-investigate/`, {
+      method: 'POST',
+    });
+  }
+
+  async autoProcessVerifiedLeads(): Promise<any> {
+    return this.request('/leads/auto-process-verified/', {
+      method: 'POST',
+    });
+  }
+
   async recalculateLeadScore(leadId: string): Promise<any> {
     return this.request(`/leads/${leadId}/recalculate-score/`, {
       method: 'POST',

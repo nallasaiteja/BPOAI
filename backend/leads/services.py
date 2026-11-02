@@ -295,6 +295,10 @@ class EmailDomainIntelligenceService:
         if '@' not in email:
             lead.manual_verification_required = True
             lead.domain_confidence_score = 0
+            lead.lead_score = 0
+            lead.is_scored = True
+            lead.lead_score_category = LeadScoreCategory.NEEDS_VERIFICATION
+            lead.score_explanation = "Invalid or missing email address."
             lead.lead_status = LeadStatus.NEEDS_VERIFICATION
             lead.save()
             return {'status': 'invalid_email', 'confidence': 0}
@@ -317,6 +321,18 @@ class EmailDomainIntelligenceService:
 
             lead.domain_company_matched = False
             lead.is_domain_analyzed = True
+
+            # Set verification score directly as initial lead score & grade
+            lead.lead_score = lead.domain_confidence_score
+            lead.is_scored = True
+            lead.score_explanation = reason
+            lead.score_breakdown = {
+                'domain_verification': lead.domain_confidence_score,
+                'is_business_domain': False,
+                'company_matched': False,
+                'verified': lead.is_company_verified
+            }
+            lead.lead_score_category = LeadScoreCategory.WARM if lead.is_company_verified else LeadScoreCategory.NEEDS_VERIFICATION
 
             # Ensure company object exists with verification notes
             company_cleaned = re.sub(r'[^a-zA-Z0-9\s]', '', lead.company_name.lower())
@@ -414,6 +430,26 @@ class EmailDomainIntelligenceService:
         lead.company = company
         lead.is_company_verified = (confidence >= 70)
         lead.manual_verification_required = (confidence < 70)
+
+        # Set verification score directly as initial lead score & grade instead of 0
+        lead.lead_score = confidence
+        lead.is_scored = True
+        lead.score_explanation = reason
+        lead.score_breakdown = {
+            'domain_verification': confidence,
+            'is_business_domain': lead.is_business_domain,
+            'company_matched': match_found,
+            'verified': lead.is_company_verified
+        }
+        if confidence >= 80:
+            lead.lead_score_category = LeadScoreCategory.HOT
+        elif confidence >= 70:
+            lead.lead_score_category = LeadScoreCategory.WARM
+        elif confidence >= 40:
+            lead.lead_score_category = LeadScoreCategory.COLD
+        else:
+            lead.lead_score_category = LeadScoreCategory.NEEDS_VERIFICATION
+
         if confidence < 70:
             lead.lead_status = LeadStatus.NEEDS_VERIFICATION
         else:
