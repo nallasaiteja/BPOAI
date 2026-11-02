@@ -61,16 +61,19 @@ export const CompanyResearchView: React.FC<CompanyResearchViewProps> = ({
       .catch(() => null);
   }, []);
 
+  // Strictly filter to only leads whose verification is confirmed (green badge)
+  const verifiedLeads = leads.filter(l => l.is_company_verified);
+
   // Sync selected lead when list changes
   useEffect(() => {
-    if ((!selectedLeadId || !leads.some(l => l.id === selectedLeadId)) && leads.length > 0) {
-      setSelectedLeadId(leads[0].id);
+    if ((!selectedLeadId || !verifiedLeads.some(l => l.id === selectedLeadId)) && verifiedLeads.length > 0) {
+      setSelectedLeadId(verifiedLeads[0].id);
     }
-  }, [leads, selectedLeadId]);
+  }, [verifiedLeads, selectedLeadId]);
 
   // Count verified leads pending automated crawling & outreach drafting
-  const verifiedPendingOutreach = leads.filter(
-    l => l.is_company_verified && l.lead_status !== 'AWAITING_APPROVAL' && !l.is_email_generated
+  const verifiedPendingOutreach = verifiedLeads.filter(
+    l => l.lead_status !== 'AWAITING_APPROVAL' && !l.is_email_generated
   ).length;
 
   // Auto-process any verified leads into the outreach queue automatically
@@ -93,11 +96,11 @@ export const CompanyResearchView: React.FC<CompanyResearchViewProps> = ({
     return () => clearInterval(interval);
   }, [verifiedPendingOutreach, onRefresh]);
 
-  const activeLead = leads.find(l => l.id === selectedLeadId);
+  const activeLead = verifiedLeads.find(l => l.id === selectedLeadId);
   const report: ResearchReport | undefined = activeLead?.research_report;
 
-  // Filtered Leads Directory
-  const filteredLeads = leads.filter((lead) => {
+  // Filtered Leads Directory (strictly across verified leads only)
+  const filteredLeads = verifiedLeads.filter((lead) => {
     const q = searchTerm.toLowerCase();
     const matchesSearch = 
       lead.company_name.toLowerCase().includes(q) ||
@@ -116,12 +119,12 @@ export const CompanyResearchView: React.FC<CompanyResearchViewProps> = ({
     return true;
   });
 
-  // KPI Calculations
-  const totalInvestigated = leads.filter(l => l.research_report).length;
-  const completedResearch = leads.filter(l => l.research_report && l.research_report.qualification_status !== 'INSUFFICIENT_EVIDENCE').length;
-  const highPriorityProspects = leads.filter(l => (l.research_report?.company_fit_score || 0) >= 75).length;
-  const warmProspects = leads.filter(l => (l.research_report?.company_fit_score || 0) >= 50 && (l.research_report?.company_fit_score || 0) < 75).length;
-  const insufficientEvidence = leads.filter(l => l.research_report?.qualification_status === 'INSUFFICIENT_EVIDENCE').length;
+  // KPI Calculations across verified companies
+  const totalInvestigated = verifiedLeads.filter(l => l.research_report).length;
+  const completedResearch = verifiedLeads.filter(l => l.research_report && l.research_report.qualification_status !== 'INSUFFICIENT_EVIDENCE').length;
+  const highPriorityProspects = verifiedLeads.filter(l => (l.research_report?.company_fit_score || 0) >= 75).length;
+  const warmProspects = verifiedLeads.filter(l => (l.research_report?.company_fit_score || 0) >= 50 && (l.research_report?.company_fit_score || 0) < 75).length;
+  const insufficientEvidence = verifiedLeads.filter(l => l.research_report?.qualification_status === 'INSUFFICIENT_EVIDENCE').length;
 
   // Action Handlers
   const handleInvestigate = async (leadId: string, forceRefresh = false) => {
@@ -268,7 +271,7 @@ export const CompanyResearchView: React.FC<CompanyResearchViewProps> = ({
           <span className="text-[11px] text-slate-500 font-medium block">Total Investigated</span>
           <div className="flex items-baseline justify-between mt-1">
             <span className="text-xl font-bold text-slate-800">{totalInvestigated}</span>
-            <span className="text-[10px] text-slate-400">of {leads.length} leads</span>
+            <span className="text-[10px] text-slate-400">of {verifiedLeads.length} verified</span>
           </div>
         </div>
 
@@ -492,8 +495,12 @@ export const CompanyResearchView: React.FC<CompanyResearchViewProps> = ({
                 );
               })
             ) : (
-              <div className="text-center py-10 text-slate-400 text-xs">
-                No matching companies found.
+              <div className="text-center py-10 px-4 text-slate-400 text-xs space-y-1">
+                <ShieldCheck className="w-6 h-6 text-slate-300 mx-auto mb-2" />
+                <p className="font-semibold text-slate-600">No verified companies found</p>
+                <p className="text-[11px] text-slate-400">
+                  Only leads with confirmed corporate domain verification (green badge) appear in Company Intelligence.
+                </p>
               </div>
             )}
           </div>

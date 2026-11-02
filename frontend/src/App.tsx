@@ -443,7 +443,7 @@ export const App: React.FC = () => {
 
           {currentTab === 'research' && (
             <CompanyResearchView
-              leads={leads}
+              leads={leads.filter(l => l.is_company_verified)}
               onTriggerResearch={handleTriggerPipeline}
               onDeleteLead={handleDeleteLead}
               onDeleteAll={handleDeleteAllLeads}
